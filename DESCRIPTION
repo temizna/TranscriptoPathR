@@ -1,0 +1,50 @@
+Package: RNAnalyzeR
+Title: A Comprehensive Shiny App for RNA-Seq Analysis
+Version: 0.1.0
+Authors@R: person("Alpay", "Temiz", email = "temizna@umn.edu", role = c("aut", "cre"))
+Description: 
+    RNAnalyzeR provides an interactive Shiny interface for complete RNA-Seq analysis,
+    including data upload, normalization, quality control, differential expression,
+    gene expression visualization, pathway analysis, and GSEA using CRAN and Bioconductor tools.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0)
+Imports:
+    shiny,
+    gridExtra,
+    shinythemes,
+    ggplot2,
+    DT,
+    tidyr,
+    tidyselect,
+    readxl,
+    BiocManager,
+    VennDiagram,
+    dplyr,
+    stringr,
+    readr,
+    RColorBrewer,
+    DESeq2,
+    GEOquery,
+    Biobase,
+    clusterProfiler,
+    enrichplot,
+    ComplexHeatmap,
+    msigdbr,
+    ReactomePA,
+    pathfindR,
+    ggrepel,
+    tibble,
+    circlize,
+    AnnotationDbi,
+    org.Hs.eg.db,
+    org.Mm.eg.db
+Suggests:
+    testthat,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
