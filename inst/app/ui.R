@@ -277,7 +277,7 @@ ui <- fluidPage(
                                "TF_Perturbations_Followed_by_Expression",
                                "hTFtarget",
                                "TFLink"), selected = NULL),
-                 selectInput("enrichment_method", "Select Enrichment Method:", choices = c("GSEA", "Over_representation")),
+                 selectInput("enrichment_method", "Select Enrichment Method:", choices = c("Over_representation","GSEA")),
                  selectInput("gene_direction", "Direction:", choices = c("Up", "Down", "Both")),
                  sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
                  sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),

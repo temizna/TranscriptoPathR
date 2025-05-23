@@ -146,7 +146,7 @@ After installation, launch the app from R or RStudio:
 
 ```r
 library(TransriptoPathR)
-TransriptoPathR::run_app()
+TranscriptoPathR::run_app()
 ```
 
 This will open the app in your default web browser.
