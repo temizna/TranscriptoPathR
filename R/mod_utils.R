@@ -23,6 +23,29 @@ convert_ensembl_to_symbol <- function(gene_ids, species = "Homo sapiens") {
   out <- setNames(res$SYMBOL, res$ENSEMBL)
   return(out[!duplicated(names(out))])
 }
+#' Convert Gene Symbols to Ensembl IDs
+#'
+#' @description Converts gene symbols to Ensembl IDs using the appropriate OrgDb.
+#' 
+#' @param gene_symbols Character vector of gene symbols
+#' @param species Character string: either "Homo sapiens" or "Mus musculus"
+#'
+#' @return A named character vector with gene symbols as names and Ensembl IDs as values
+#' @importFrom AnnotationDbi select
+#' @export
+convert_symbol_to_ensembl <- function(gene_symbols, species = "Homo sapiens") {
+  org_db <- get_orgdb(species)
+  id_type <- "SYMBOL"
+  res <- tryCatch({
+    AnnotationDbi::select(org_db, keys = gene_symbols, columns = c("ENSEMBL"), keytype = id_type)
+  }, error = function(e) {
+    warning("Symbol to Ensembl conversion failed: ", e$message)
+    return(NULL)
+  })
+  out <- setNames(res$ENSEMBL, res$SYMBOL)
+  return(out[!duplicated(names(out))])
+}
+
 # Suppress global variable notes for NSE variables
 utils::globalVariables(c(
   "log2FoldChange", "padj", "label", "baseMean", "color",

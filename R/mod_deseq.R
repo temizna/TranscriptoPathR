@@ -7,8 +7,8 @@
 #' @param input Shiny input object
 #' @param output Shiny output object
 #' @param session Shiny session object
-#' @param data ReactiveValues with counts, samples, norm_counts, species
-#' @param dds_rv ReactiveVal holding DESeqDataSet
+#' @param filtered_data_rv a reactive list with counts, samples, norm_counts, species
+#' @param filtered_dds_rv a reactive valaue holding DESeqDataSet
 #' @param res_reactive ReactiveVal to store DESeq2 result
 #' @return None (outputs rendered)
 #' @import DESeq2
@@ -25,27 +25,31 @@
 #' @importFrom org.Hs.eg.db org.Hs.eg.db
 #' @importFrom shinythemes shinytheme
 #' @export
-mod_differential_expression <- function(input, output, session, data, dds_rv, res_reactive) {
+mod_differential_expression <- function(input, output, session, filtered_data_rv, filtered_dds_rv, res_reactive) {
 
   observe({
-    req(data$samples)
-    cols <- colnames(data$samples)
+    req(filtered_data_rv$samples)
+    cols <- colnames(filtered_data_rv$samples)
     updateSelectInput(session, "metadata_column", choices = cols)
   })
 
   observeEvent(input$metadata_column, {
-    req(data$samples)
+    req(filtered_data_rv$samples)
     col <- input$metadata_column
-    levels <- unique(as.character(data$samples[[col]]))
+    levels <- unique(as.character(filtered_data_rv$samples[[col]]))
     updateSelectInput(session, "reference_condition", choices = levels)
     updateSelectInput(session, "test_condition", choices = levels)
   })
 
   observeEvent(input$run_de, {
     req(input$metadata_column, input$reference_condition, input$test_condition)
-    req(dds_rv())
-
-    dds <- dds_rv()
+    req(filtered_dds_rv())
+    # 🚨 Check for identical reference and test
+    if (input$reference_condition == input$test_condition) {
+      showNotification("Reference and Test conditions must be different.", type = "error")
+      return()
+    }
+    dds <- filtered_dds_rv()
     dds[[input$metadata_column]] <- relevel(factor(dds[[input$metadata_column]]), ref = input$reference_condition)
     design(dds) <- as.formula(paste("~", input$metadata_column))
 
@@ -55,7 +59,7 @@ mod_differential_expression <- function(input, output, session, data, dds_rv, re
     res$symbol <- rownames(res)
 
     if (is_ensembl_id(rownames(res))) {
-      conv <- convert_ensembl_to_symbol(rownames(res), data$species)
+      conv <- convert_ensembl_to_symbol(rownames(res), filtered_data_rv$species)
       res$symbol <- conv[rownames(res)]
     }
 
@@ -68,8 +72,8 @@ mod_differential_expression <- function(input, output, session, data, dds_rv, re
 
     res_reactive(res_df)
     
-    # Update the dds_rv with the final dds object (if you need to use it elsewhere)
-    dds_rv(dds)  # This will update the dds_rv with the new DESeq2 results
+    # Update the filtered_dds_rv with the final dds object (if you need to use it elsewhere)
+    filtered_dds_rv(dds)  # This will update the filtered_dds_rv with the new DESeq2 results
     #print(resultsNames(dds)) 
     
   })
@@ -79,74 +83,117 @@ mod_differential_expression <- function(input, output, session, data, dds_rv, re
     datatable(res_reactive(), options = list(scrollX = TRUE))
   })
 
+  generate_heatmap_plot <- function(filtered_data, top_n, res_data, metadata_column, cluster_columns) {
+    # Ensure 'res_data' and 'filtered_data' are available
+    top_genes <- head(res_data[order(res_data$padj), ], top_n)
+    # Extract and log-transform expression data for the top genes
+    expr <- filtered_data$norm_counts[rownames(top_genes), ]
+    expr <- log2(expr + 1)
+    # Get the metadata for grouping
+    group_values <- filtered_data$samples[[metadata_column]]
+    group_levels <- unique(group_values)
+    
+    # Define color palette for the groups
+    palette <- colorRampPalette(brewer.pal(8, "Set2"))(length(group_levels))
+    
+    # Create Heatmap Annotation
+    ha <- ComplexHeatmap::HeatmapAnnotation(
+      df = data.frame(Group = group_values),
+      col = list(Group = setNames(palette, group_levels))
+    )
+    
+    # Cluster columns based on user input or default to TRUE
+    cluster_cols <- if (!is.null(cluster_columns)) cluster_columns else TRUE
+    
+    # Create and return the heatmap
+    heatmap_plot <- ComplexHeatmap::Heatmap(expr,
+                                            name = "log2(norm counts)",
+                                            top_annotation = ha,
+                                            cluster_rows = TRUE,
+                                            cluster_columns = cluster_cols,
+                                            show_column_names = FALSE,
+                                            show_row_names = TRUE,
+                                            row_names_gp = gpar(fontsize=4, fontface="bold"),
+                                            # width = unit(8, "cm"), height = unit(8, "cm"),
+                                            column_title = paste("Top", top_n, "Diff Genes"),
+                                            column_title_gp = grid::gpar(fontface = "bold",fontsize = 6))
+    
+    return(heatmap_plot)
+  }
+  output$heatmapPlot <- renderPlot({
+    req(res_reactive(), filtered_data_rv$norm_counts, filtered_data_rv$samples)  # Ensure all required inputs are available
+    
+    top_n <- input$num_genes
+    metadata_column <- input$metadata_column
+    cluster_columns <- input$cluster_columns  # Assuming this input exists for clustering options
+    # Print to check if inputs are valid
+    # print("Inputs are valid for heatmap rendering")
+    top_genes <- head(res_reactive()[order(res_reactive()$padj), ], top_n)
+    expr <- filtered_data_rv$norm_counts[rownames(top_genes), ]
+    expr <- log2(expr + 1)
+    
+    group_values <- filtered_data_rv$samples[[metadata_column]]
+    group_levels <- unique(group_values)
+    if (length(group_levels) <= 8) {
+      palette <- RColorBrewer::brewer.pal(length(group_levels), "Dark2")
+    } else {
+      # Fallback to rainbow_hcl for more groups
+      palette <- colorspace::rainbow_hcl(length(group_levels))
+    }
+    
+    # Create Heatmap Annotation
+    ha <- ComplexHeatmap::HeatmapAnnotation(
+      df = data.frame(Group = group_values),
+      col = list(Group = setNames(palette, group_levels))
+    )
+    cluster_cols <- if (!is.null(cluster_columns)) cluster_columns else TRUE
+    p1<-ComplexHeatmap::Heatmap(expr,
+                            name = "log2(norm counts)",
+                            top_annotation = ha,
+                            cluster_rows = TRUE,
+                            cluster_columns = cluster_cols,
+                            show_column_names = FALSE,
+                            show_row_names = TRUE,
+                            row_names_gp = gpar(fontsize=4, fontface="bold"),
+                            column_title = paste("Top", top_n, "Diff Genes"),
+                            column_title_gp = grid::gpar(fontface = "bold"))
+    ComplexHeatmap::draw(p1)
+  })
+  
+  
+  # Download handler for heatmap plot
+  output$download_heatmap <- downloadHandler(
+    filename = function() { paste0("heatmap_", Sys.Date(), ".pdf") },
+    content = function(file) {
+      pdf(file, width = 10, height = 8)  # Set size if needed
+      req(filtered_data_rv, res_reactive())
+      
+      top_n <- input$num_genes
+      metadata_column <- input$metadata_column
+      cluster_columns <- input$cluster_columns
+      
+      heatmap_plot <- generate_heatmap_plot(
+        filtered_data = filtered_data_rv,
+        top_n = top_n,
+        res_data = res_reactive(),
+        metadata_column = metadata_column,
+        cluster_columns = cluster_columns
+      )
+      
+      ComplexHeatmap::draw(heatmap_plot)  # <<< This is essential
+      dev.off()
+    }
+  )
+  
+  
   output$download_de_table <- downloadHandler(
     filename = function() "differential_expression_results.csv",
     content = function(file) {
       write.csv(res_reactive(), file, row.names = FALSE)
     }
   )
-
-  output$heatmapPlot <- renderPlot({
-    req(res_reactive(), data$norm_counts, data$samples, input$metadata_column)
-    top_n <- input$num_genes
-    top_genes <- head(res_reactive()[order(res_reactive()$padj), ], top_n)
-    expr <- data$norm_counts[rownames(top_genes), ]
-    expr <- log2(expr + 1)
-
-    group_values <- data$samples[[input$metadata_column]]
-    group_levels <- unique(group_values)
-    palette <- colorRampPalette(brewer.pal(8, "Set2"))(length(group_levels))
-    ha <- ComplexHeatmap::HeatmapAnnotation(
-      df = data.frame(Group = group_values),
-      col = list(Group = setNames(palette, group_levels))
-    )
-
-    cluster_cols <- if (!is.null(input$cluster_columns)) input$cluster_columns else TRUE
-
-    ComplexHeatmap::Heatmap(expr,
-                            name = "log2(norm counts)",
-                            top_annotation = ha,
-                            cluster_rows = TRUE,
-                            cluster_columns = cluster_cols,
-                            show_column_names = FALSE,
-                            show_row_names = FALSE,
-                            column_title = paste("Top", top_n, "Differentially Expressed Genes"),
-                            column_title_gp = grid::gpar(fontface = "bold"))
-  })
-
-  output$download_heatmap <- downloadHandler(
-    filename = function() { "de_heatmap.pdf" },
-    content = function(file) {
-      pdf(file, width = 10, height = 8)
-      top_n <- input$num_genes
-      top_genes <- head(res_reactive()[order(res_reactive()$padj), ], top_n)
-      expr <- data$norm_counts[rownames(top_genes), ]
-      expr <- log2(expr + 1)
-
-      group_values <- data$samples[[input$metadata_column]]
-      group_levels <- unique(group_values)
-      palette <- colorRampPalette(brewer.pal(8, "Set2"))(length(group_levels))
-      ha <- ComplexHeatmap::HeatmapAnnotation(
-        df = data.frame(Group = group_values),
-        col = list(Group = setNames(palette, group_levels))
-      )
-
-      cluster_cols <- if (!is.null(input$cluster_columns)) input$cluster_columns else TRUE
-
-      print(ComplexHeatmap::Heatmap(expr,
-                                    name = "log2(norm counts)",
-                                    top_annotation = ha,
-                                    cluster_rows = TRUE,
-                                    cluster_columns = cluster_cols,
-                                    show_column_names = FALSE,
-                                    show_row_names = FALSE,
-                                    column_title = paste("Top", top_n, "Differentially Expressed Genes"),
-                                    column_title_gp = grid::gpar(fontface = "bold")))
-      dev.off()
-    }
-  )
 }
-
+ 
 # === Register in server ===
-# mod_differential_expression(input, output, session, data, dds_rv, res_reactive)
+# mod_differential_expression(input, output, session, filtered_data, filtered_dds_rv, res_reactive)
 

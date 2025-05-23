@@ -4,7 +4,7 @@
 \alias{mod_gene_expression_plot}
 \title{Module to visualize individual gene expression across sample groups}
 \usage{
-mod_gene_expression_plot(input, output, session, data)
+mod_gene_expression_plot(input, output, session, filtered_data_rv)
 }
 \arguments{
 \item{input}{Shiny input object}
@@ -13,7 +13,7 @@ mod_gene_expression_plot(input, output, session, data)
 
 \item{session}{Shiny session object}
 
-\item{data}{ReactiveValues containing counts, samples, norm_counts, and species}
+\item{filtered_data_rv}{reactive list containing counts, samples, norm_counts, and species}
 }
 \value{
 None. Outputs are rendered to the UI

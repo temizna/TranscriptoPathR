@@ -1,0 +1,5 @@
+[2025-05-21 18:26:51] User clicked load_data
+Parameters: data_mode: upload; counts_file: BRCA_raw_counts_tumor.csv, 121401139, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//Rtmp3y69yE/c3a66aef4352206c12e6da27/0.csv; design_file: tcga_breast_coldata.csv, 22873, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//Rtmp3y69yE/db3fd4b863b1491063ac7a17/0.csv; design_formula: ~ condition; species: Homo sapiens
+[2025-05-21 18:27:01] User clicked sample_select-run_filter
+[2025-05-21 18:36:58] User clicked run_crossplot
+Parameters: crossplot_gene_label: ; metadata_column_x: condition; reference_condition_x: WILD_TYPE; test_condition_x: SF3B1_K700E; metadata_column_y: condition; reference_condition_y: WILD_TYPE; test_condition_y: BRCA1_2; crossplot_gene_count: 2000; crossplot_topgenes: 1

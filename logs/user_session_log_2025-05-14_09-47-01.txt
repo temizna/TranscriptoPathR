@@ -1,0 +1,5 @@
+[2025-05-14 09:37:55] User clicked load_data
+Parameters: data_mode: upload; counts_file: Full_MPNST_gene_name.csv, 10064694, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpNqF3hW/b6a17615cd04b80817ff8b31/0.csv; design_file: sample_spec.csv, 2848, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpNqF3hW/aa7ed235390e5473c5807f97/0.csv; design_formula: ~ sample_type; species: Homo sapiens
+[2025-05-14 09:37:57] User clicked sample_select-select_all
+[2025-05-14 09:38:41] User clicked run_PCA
+Parameters: max_pc: 10; variance_threshold: 1; similarity_threshold: 0.1; percent_of_data: 0.8; max_genes: 500; min_genes: 50; pca_enrich_method: enrichGO

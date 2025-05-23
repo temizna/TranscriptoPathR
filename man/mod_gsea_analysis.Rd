@@ -4,7 +4,7 @@
 \alias{mod_gsea_analysis}
 \title{GSEA Module}
 \usage{
-mod_gsea_analysis(input, output, session, data, res_reactive)
+mod_gsea_analysis(input, output, session, filtered_data_rv, res_reactive)
 }
 \arguments{
 \item{input}{Shiny input object}
@@ -13,7 +13,7 @@ mod_gsea_analysis(input, output, session, data, res_reactive)
 
 \item{session}{Shiny session object}
 
-\item{data}{ReactiveValues containing species and normalized expression}
+\item{filtered_data_rv}{a list containing species and normalized expression}
 
 \item{res_reactive}{ReactiveVal containing DE results}
 }

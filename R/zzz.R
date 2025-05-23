@@ -15,6 +15,7 @@
       }
     }
   }
+utils::globalVariables(c("Gene_Symbol", "TF_name", "V1", "V2", "br"))
 
   # Install CRAN packages if needed
   install_if_missing(cran_required, install.packages)

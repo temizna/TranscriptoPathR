@@ -1,0 +1,3 @@
+[2025-05-19 21:43:21] User clicked load_data
+Parameters: data_mode: upload; counts_file: BRCA_raw_counts_tumor.csv, 121401139, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpmOoqXk/3d3521c9c2bed3daac62d2aa/0.csv; design_file: tcga_breast_names_and_genos.csv, 22925, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpmOoqXk/9e5f3cbb9b498ae2a0c6425b/0.csv; design_formula: ~ Mutation; species: Homo sapiens
+[2025-05-19 21:43:31] User clicked sample_select-run_filter

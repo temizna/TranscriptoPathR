@@ -4,7 +4,7 @@
 \alias{mod_cross_plot}
 \title{Cross Plot and Venn Diagram Module}
 \usage{
-mod_cross_plot(input, output, session, data, dds_rv)
+mod_cross_plot(input, output, session, filtered_data_rv, filtered_dds_rv)
 }
 \arguments{
 \item{input}{Shiny input object.}
@@ -13,9 +13,9 @@ mod_cross_plot(input, output, session, data, dds_rv)
 
 \item{session}{Shiny session object.}
 
-\item{data}{Data containing counts, samples, norm_counts, and species}
+\item{filtered_data_rv}{reactive data containing counts, samples, norm_counts, and species}
 
-\item{dds_rv}{A reactive value containing the DESeq2 object.}
+\item{filtered_dds_rv}{A reactive value containing the DESeq2 object.}
 }
 \value{
 None. Updates Cross Plot and Venn Diagram and download handlers.

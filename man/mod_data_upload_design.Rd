@@ -4,7 +4,7 @@
 \alias{mod_data_upload_design}
 \title{Data upload and design}
 \usage{
-mod_data_upload_design(input, output, session, data, dds_rv)
+mod_data_upload_design(input, output, session, loaded_data_rv, dds_rv)
 }
 \arguments{
 \item{input}{Shiny input object.}
@@ -13,7 +13,7 @@ mod_data_upload_design(input, output, session, data, dds_rv)
 
 \item{session}{Shiny session object.}
 
-\item{data}{ReactiveValues to store processed data (counts, samples, norm_counts).}
+\item{loaded_data_rv}{ReactiveValues to store processed data (counts, samples, norm_counts).}
 
 \item{dds_rv}{A reactiveVal container for storing the DESeq2 dataset.}
 }

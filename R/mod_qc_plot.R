@@ -42,9 +42,17 @@ mod_qc_plot <- function(input, output, session, data) {
     group_factor <- factor(data$samples[[group_col]])
 
     if (input$qc_plot_type == "PCA") {
-      pca <- prcomp(t(log2(data$norm_counts + 1)), scale. = TRUE)
+      expr <- log2(data$norm_counts + 1)
+      expr <- expr[apply(expr, 1, function(x) var(x, na.rm = TRUE) > 0), , drop = FALSE]
+      pca <- prcomp(t(expr), scale. = TRUE)
       percentVar <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
-      df <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2], Group = group_factor, Sample = rownames(data$samples))
+      df <- data.frame(
+        PC1 = pca$x[, 1],
+        PC2 = pca$x[, 2],
+        Group = group_factor,
+        Sample = rownames(data$samples)
+      )
+      
       ggplot(df, aes(x = PC1, y = PC2, color = Group, label = Sample)) +
         geom_point(size = 3) +
         #geom_text_repel(show.legend = FALSE, max.overlaps = if (input$show_labels) 100 else 0) +
@@ -53,13 +61,13 @@ mod_qc_plot <- function(input, output, session, data) {
         theme_minimal() +
         theme(axis.title = element_text(face = "bold")) +
         scale_color_brewer(palette = "Set2")
-
     } else if (input$qc_plot_type == "Sample Distance") {
       dist_matrix <- dist(t(log2(data$norm_counts + 1)))
       mat <- as.matrix(dist_matrix)
       rownames(mat) <- colnames(data$norm_counts)
       colnames(mat) <- colnames(data$norm_counts)
-      ComplexHeatmap::Heatmap(mat, name = "Distance")
+      ComplexHeatmap::Heatmap(mat, name = "Distance",  column_names_gp = grid::gpar(fontsize = 4),
+                              width = unit(20, "cm"), height = unit(20, "cm"))
 
     } else if (input$qc_plot_type == "Mean-Variance") {
       means <- rowMeans(data$norm_counts)

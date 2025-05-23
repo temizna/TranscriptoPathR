@@ -8,7 +8,7 @@
 #' @param input Shiny input object
 #' @param output Shiny output object
 #' @param session Shiny session object
-#' @param data ReactiveValues containing counts, samples, norm_counts, and species
+#' @param filtered_data_rv reactive list containing counts, samples, norm_counts, and species
 #' @return None. Outputs are rendered to the UI
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_jitter labs theme_minimal scale_color_brewer scale_y_continuous
 #' @importFrom stringr str_split
@@ -17,126 +17,132 @@
 #' @importFrom stats as.formula dist model.matrix prcomp quantile relevel var na.omit cor
 #' @importFrom grDevices dev.off pdf colorRampPalette
 #' @importFrom grid gpar
-#' @importFrom shiny isolate req renderPlot renderImage showNotification downloadHandler renderPrint
+#' @importFrom shiny isolate req renderPlot updateSelectInput renderImage showNotification downloadHandler renderPrint
 #' @importFrom org.Hs.eg.db org.Hs.eg.db
 #' @importFrom shinythemes shinytheme
 #' @importFrom tidyr pivot_longer
 #' @importFrom tidyselect all_of
 #' @importFrom shiny validate need
+#' @importFrom utils install.packages
 #' @export
-mod_gene_expression_plot <- function(input, output, session, data) {
-
+mod_gene_expression_plot <- function(input, output, session, filtered_data_rv) {
+  
   # Update group selections based on sample metadata
   observe({
-    req(data$samples)
-    choices <- colnames(data$samples)
+    req(filtered_data_rv$samples)
+    choices <- colnames(filtered_data_rv$samples)
     updateSelectInput(session, "group_select_geneexpr", choices = choices)
   })
-
-  # Render gene expression plot
-  output$geneExpressionPlot <- renderPlot({
-    req(input$gene_select, input$group_select_geneexpr)
-    req(data$norm_counts, data$samples)
-# Parse and clean user input (space/comma-separated gene names)
-genes_raw <- input$gene_select
-# DEBUGGING: Check input string for any issues
-#print("Raw input gene string:")
-#print(genes_raw)
-
-# Split the input string by spaces or commas
-selected_genes <- unlist(stringr::str_split(genes_raw, "[\\s,]+"))
-
-# DEBUGGING: Check after splitting the string
-#print("Selected genes after splitting:")
-#print(selected_genes)
-
-# Remove any extra spaces (trim) and empty entries
-selected_genes <- trimws(selected_genes)  # Remove leading and trailing spaces
-selected_genes <- selected_genes[selected_genes != ""]  # Remove empty strings
-
-# DEBUGGING: Print the final list of selected genes
-#print("Final list of selected genes:")
-#print(selected_genes)
-# Available genes from data$norm_counts
-available_genes <- rownames(data$norm_counts)
-#print("Available genes:")
-#print(head(available_genes))
-
-# Check if available genes are Ensembl IDs and selected genes are symbols
-if (is_ensembl_id(available_genes) && !is_ensembl_id(selected_genes)) {
-  # If available genes are Ensembl and selected genes are symbols, convert symbols to Ensembl IDs
-  symbol_to_ens <- convert_ensembl_to_symbol(available_genes, data$species)
-  
-  # Map selected gene symbols to Ensembl IDs
-  symbol_map <- names(symbol_to_ens)[match(selected_genes, symbol_to_ens)]
-  
-  # Find the matched Ensembl genes in available genes
-  found_genes <- symbol_map[!is.na(symbol_map) & symbol_map %in% available_genes]
-  
-  # Create labels for the found genes
-  gene_labels <- selected_genes[!is.na(symbol_map) & symbol_map %in% available_genes]
-  names(gene_labels) <- found_genes
-} else {
-  # If both are in symbol format, directly match the symbols
-  found_genes <- selected_genes[selected_genes %in% available_genes]
-  
-  # Debugging: Check the found genes
-  #print("Found genes:")
-  #print(found_genes)
-  
-  # If no valid genes are found, show an error and stop execution
-  if (length(found_genes) == 0) {
-    showNotification("None of the entered genes matched the dataset.", type = "error")
-    return(NULL)
-  }
-  
-  # Assign labels to the found genes
-  gene_labels <- setNames(found_genes, found_genes)
-}
-
-# Prepare expression data for plotting
-  df <- data.frame(t(data$norm_counts[found_genes, , drop = FALSE]))
-  df$Sample <- rownames(df)
-  df <- merge(df, data$samples, by.x = "Sample", by.y = "row.names")
-
-# Convert to long format
-   long_df <- tidyr::pivot_longer(
-    df, cols = all_of(found_genes), names_to = "Gene", values_to = "Expression"
-   )
-
-# Annotate
-   long_df$Group <- df[[input$group_select_geneexpr]][match(long_df$Sample, df$Sample)]
-   long_df$Expression <- as.numeric(long_df$Expression)
-   long_df$log2_Expression <- log2(long_df$Expression + 1)
-
-# Label genes
-   long_df$Gene <- gene_labels[long_df$Gene]
-   long_df$Gene <- factor(long_df$Gene, levels = unique(long_df$Gene))
-
-# Plot
-   grid::grid.newpage()
-   grid::pushViewport(grid::viewport())
-
-    ggplot(long_df, aes(x = Group, y = log2_Expression, color = Group)) +
+  generate_gene_expression_plot <- function(filtered_data, selected_genes, group_col, species) {
+    available_genes <- rownames(filtered_data$norm_counts)
+    
+    if (is_ensembl_id(available_genes)) {
+      # Convert user-given symbols to Ensembl
+      symbol_to_ens <- convert_symbol_to_ensembl(selected_genes, species)
+      matched_symbols <- names(symbol_to_ens)
+      found_genes <- unname(symbol_to_ens)
+      found_genes <- found_genes[!is.na(found_genes) & found_genes %in% available_genes]
+      matched_symbols <- matched_symbols[!is.na(found_genes)]
+      names(matched_symbols) <- found_genes
+    } else {
+      # Gene symbols directly in data
+      found_genes <- selected_genes[selected_genes %in% available_genes]
+      matched_symbols <- setNames(found_genes, found_genes)
+    }
+    
+    if (length(found_genes) == 0) {
+      showNotification("None of the entered gene symbols matched the dataset.", type = "error")
+      return(NULL)
+    }
+    df <- data.frame(t(filtered_data$norm_counts[found_genes, , drop = FALSE]))
+    df$Sample <- rownames(df)
+    df <- merge(df, filtered_data$samples, by.x = "Sample", by.y = "row.names")
+    
+    # Convert to long format
+    long_df <- tidyr::pivot_longer(
+      df, cols = all_of(found_genes), names_to = "Gene", values_to = "Expression"
+    )
+    
+    # Annotate
+    long_df$Group <- df[[group_col]][match(long_df$Sample, df$Sample)]
+    long_df$Expression <- as.numeric(long_df$Expression)
+    long_df$log2_Expression <- log2(long_df$Expression + 1)
+    # Create a mapping from gene ID to label (can be identity or from conversion)
+    gene_labels <- setNames(found_genes, found_genes)
+    print(head(long_df))
+    # Label genes
+    gene_labels <- setNames(found_genes, found_genes)
+    long_df$Gene <- gene_labels[long_df$Gene]
+    long_df$Gene[is.na(long_df$Gene)] <- long_df$Gene[is.na(long_df$Gene)]
+    long_df$Gene <- factor(long_df$Gene, levels = unique(long_df$Gene))
+    
+    p <- ggplot(long_df, aes(x = Group, y = log2_Expression, color = Group)) +
       geom_boxplot(outlier.shape = NA) +
       geom_jitter(width = 0.25, alpha = 0.6) +
-      facet_wrap(~Gene, scales = "free_y") +
+      facet_wrap(~Gene, scales = "fixed") +
       theme_minimal() +
-      theme(axis.title = element_text(face = "bold")) +
-      labs(title = "Individual Gene Expression by Group", x = "Group", y = "Log2 Normalized Expression") +
-      scale_color_brewer(palette = "Dark2")
+      theme(
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 90, hjust = 1)
+      ) +
+      labs(
+        title = "Individual Gene Expression by Group",
+        x = "Group", y = "Log2 Normalized Expression"
+      ) +
+      scale_color_brewer(palette = "Paired")
+    
+    return(p)
+  }
+  
+  output$geneExpressionPlot <- renderPlot({
+    req(input$gene_select, input$group_select_geneexpr)
+    req(filtered_data_rv$species, filtered_data_rv)
+    
+    # Parse and clean user input (space/comma-separated gene names)
+    genes_raw <- input$gene_select
+    selected_genes <- unlist(stringr::str_split(genes_raw, "[\\s,]+"))
+    selected_genes <- trimws(selected_genes)
+    selected_genes <- selected_genes[selected_genes != ""]
+    
+    plot <- generate_gene_expression_plot(
+      filtered_data = filtered_data_rv,
+      selected_genes = selected_genes,
+      group_col = input$group_select_geneexpr,
+      species = filtered_data_rv$species
+    )
+    if (is.null(plot)) return(NULL)
+    plot
   })
-
+  
   # Download gene expression plot
   output$download_gene_plot <- downloadHandler(
-    filename = function() { paste0("gene_expression_plot.pdf") },
+    filename = function() {
+      paste0("gene_expression.plot.pdf")  # You can change the file extension as needed (e.g., ".pdf")
+    },
     content = function(file) {
-      pdf(file)
-      p <- isolate(output$geneExpressionPlot())
-      if (!is.null(p)) print(p)
-      dev.off()
-    } 
- )
+      # Generate the plot using the generate_gene_expression_plot function
+    
+      genes_raw <- input$gene_select
+      selected_genes <- unlist(stringr::str_split(genes_raw, "[\\s,]+"))
+      selected_genes <- trimws(selected_genes)
+      selected_genes <- selected_genes[selected_genes != ""]
+      
+      plot <- generate_gene_expression_plot(
+        filtered_data = filtered_data_rv,
+        selected_genes = selected_genes,
+        group_col = input$group_select_geneexpr,
+        species = filtered_data_rv$species
+      )
+      if (is.null(plot)) {
+        showNotification("No valid genes found for the plot.", type = "error")
+        return(NULL)
+      }
+      ggsave(file, plot, device = "pdf", width = 10, height = 8) # Save as PNG (change format as needed)
+    }
+  )
+  
+  
+  
 }
 
 # === Register in server ===

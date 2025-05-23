@@ -8,12 +8,13 @@ mod_pathway_analysis(
   input,
   output,
   session,
-  data,
+  filtered_data_rv,
   res_reactive,
   geneList_rv,
   kegg_pathway_results,
   d1_merged_rv,
-  pathway_input_rv
+  pathway_input_rv,
+  pathway_result_rv
 )
 }
 \arguments{
@@ -23,7 +24,7 @@ mod_pathway_analysis(
 
 \item{session}{Shiny session}
 
-\item{data}{ReactiveValues containing counts, norm_counts, samples, species}
+\item{filtered_data_rv}{a list containing counts, norm_counts, samples, species}
 
 \item{res_reactive}{ReactiveVal holding DESeq2 results}
 
@@ -34,6 +35,8 @@ mod_pathway_analysis(
 \item{d1_merged_rv}{Reactive Data frame containing gene symbols, logFC, and padj}
 
 \item{pathway_input_rv}{Reactive pathfindR input data frame}
+
+\item{pathway_result_rv}{Reactive pathway result data frame}
 }
 \description{
 This module handles pathway enrichment analysis using clusterProfiler and visualizations using enrichplot and pathfindR.

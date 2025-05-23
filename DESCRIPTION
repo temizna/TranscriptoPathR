@@ -1,4 +1,4 @@
-Package: RNAnalyzeR
+Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
 Version: 0.1.0
 Authors@R: person("Alpay", "Temiz", email = "temizna@umn.edu", role = c("aut", "cre"))
@@ -40,11 +40,14 @@ Imports:
     tibble,
     circlize,
     AnnotationDbi,
+    gson,
+    vroom,
     org.Hs.eg.db,
-    org.Mm.eg.db
+    org.Mm.eg.db,
+    DOSE,
+    NMF,
 Suggests:
     testthat,
     knitr,
     rmarkdown
-VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

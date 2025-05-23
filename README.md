@@ -1,10 +1,10 @@
-Package: RNAnalyzeR
+Package: TransriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
 Version: 0.1.0
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
-    RNAnalyzeR provides an interactive Shiny interface for complete RNA-Seq analysis,
+    TransriptoPathR provides an interactive Shiny interface for complete RNA-Seq analysis,
     including data upload, normalization, quality control, differential expression,
     gene expression visualization, pathway analysis, and GSEA using CRAN and Bioconductor tools.
 License: MIT
@@ -50,15 +50,14 @@ VignetteBuilder: knitr
 
 ---
 
-# RNAnalyzeR
+# TransriptoPathR
 
-**RNAnalyzeR** is a comprehensive Shiny-based application for end-to-end RNA-Seq data analysis. It provides an interactive GUI for both novice and advanced users to perform quality control, normalization, differential expression, pathway analysis, and gene set enrichment analysis (GSEA) with minimal coding.
+**TransriptoPathR** is a comprehensive Shiny-based application for end-to-end RNA-Seq data analysis. It provides an interactive GUI for both novice and advanced users to perform quality control, normalization, differential expression, pathway analysis, and gene set enrichment analysis (GSEA) with minimal coding.
 
 ## ✨ Features
 
 - **Data Input**  
   - Upload RNA-Seq raw count matrix and design metadata file (CSV or XLSX)  
-  - Load GEO datasets (with raw counts and metadata)
 
 - **Sample Selection**  
   - Interactive filtering of samples for downstream analysis
@@ -68,10 +67,12 @@ VignetteBuilder: knitr
 
 - **Quality Control (QC)**  
   - PCA, sample distance heatmaps, mean-variance plots, variance histograms
+- **Genes of interest Heatmap Visualization**
+  - Gene expression heatmap of uploaded genes of interest grouped by metadata categories
 
 - **Differential Expression Analysis**  
   - DESeq2-based analysis with customizable thresholds and conditions
-
+  - Users can download DE table.
 - **Heatmap**  
   - Top DE genes with hierarchical clustering and group annotations
 
@@ -79,16 +80,35 @@ VignetteBuilder: knitr
   - Visualization of differential expression results with gene labeling
 
 - **Cross Plot**  
-  - Compare DE results between two conditions or experiments
+  - Compare DE results between two separete comparisons or experiments
+  - A cross plot, Venn diagrams, heatmaps and pathway comparison is calcuated and plotted.
 
 - **Pathway Analysis**  
   - GO, KEGG, Reactome enrichment using clusterProfiler  
   - Visualizations: dot plots, cnet, circular, emap  
   - KEGG pathway rendering with `pathfindR` + gene heatmaps
+  - Pathway results can be downloaded as tables.
+- **Non-overlap Pathway Analysis**  
+  - Genes overlapping in the initial pathway analysis is removed and the same pathway analysis is repeated with this refined geneset.  
+  - Visualizations: dot plots, cnet, circular, emap
 
 - **GSEA (Gene Set Enrichment Analysis)**  
   - Supports MSigDB collections: Hallmark, GO, KEGG, Reactome  
-  - Dot plots and enrichment tables
+  - Dot plots, enrichment plots,  and enrichment tables
+
+- **Transcirption Factor Enrichment Analysis**
+  -TRANSFAC and JASPAR, ENCODE and ChEA, TRUSST, hTFtarget and TFLink databases can be used to test for transciprtion factor enrichment
+  - Dot plots and   ridgeplots
+- **Cancer Gene Census Comparison**                     
+  - Up and down regulated genes are compared to Cancer Gene Census
+  - Venn Diagram of overlaps and table of overlapping genes
+- **Dimension Reduction and Clustering Analysis**                     
+  - A preliminary Principle Component Analysis to help user understand the underlying clusters and their relations within the dataset.
+  - This is a starting analysis for more comprehensive consensus clustering or NMF analysis.
+  - Reconstructed data heatmap, sample- sample correlation heatmap showing possible clusters, expression heatmap of genes contributing to components (rudimentary meta-gene analysis), and pathway contributing to components
+- **User Session Log**                     
+  - Inputs and actions taken by the user in order. Session log can be saved.
+ 
 
 ## 🧬 Supported Species
 
@@ -97,7 +117,7 @@ VignetteBuilder: knitr
 
 ## 📦 Installation
 
-Install required CRAN and Bioconductor dependencies before installing RNAnalyzeR:
+Install required CRAN and Bioconductor dependencies before installing TransriptoPathR:
 
 ```r
 # Install Bioconductor manager
@@ -113,7 +133,9 @@ BiocManager::install(c(
 
 # Install pathfindR (if not already)
 install.packages("pathfindR")
-
+#DO NOT install immunedeconv too many dependencies
+#library(devtools) 
+#install_github("omnideconv/immunedeconv")
 # Clone or download this repo, then from root directory:
 devtools::install()
 ```
@@ -123,27 +145,27 @@ devtools::install()
 After installation, launch the app from R or RStudio:
 
 ```r
-library(RNAnalyzeR)
-RNAnalyzeR::run_app()
+library(TransriptoPathR)
+TransriptoPathR::run_app()
 ```
 
 This will open the app in your default web browser.
 
 ## 📂 File Requirements
 
-**Counts file**  
+**Counts file**
+Counts file can be any raw count file including raw counts from The Cancer Genome Atlas or any Gene Expression Omnibus database submission.
+TPM, FPKM, and CPM are NOT supported.  
 - Rows = genes, Columns = sample names  
 - Gene identifiers: gene symbols or Ensembl IDs  
 - Format: `.csv` or `.xlsx`
 
 **Design file**  
+Design file descirbes the experiment and the conditions/genotypes/treatments, etc used. 
 - Rows = sample names (must match columns in count matrix)  
 - Columns = metadata variables (e.g., `condition`, `batch`)  
 - Format: `.csv` or `.xlsx`
 
-**GEO Input**  
-- Enter a valid GEO accession (e.g., `GSE12345`)  
-- Dataset must contain raw count matrix and metadata (not all do)
 
 ## 🛠 Development
 
@@ -191,8 +213,8 @@ run_app <- function() {
   library(msigdbr)
 
   shiny::shinyApp(
-    ui = RNAnalyzeR::app_ui(),
-    server = RNAnalyzeR::app_server
+    ui = TransriptoPathR::app_ui(),
+    server = TransriptoPathR::app_server
   )
 }
 ```

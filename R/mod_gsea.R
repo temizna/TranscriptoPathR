@@ -9,7 +9,7 @@
 #' @param input Shiny input object
 #' @param output Shiny output object
 #' @param session Shiny session object
-#' @param data ReactiveValues containing species and normalized expression
+#' @param filtered_data_rv a list containing species and normalized expression
 #' @param res_reactive ReactiveVal containing DE results
 #' @import clusterProfiler msigdbr enrichplot
 #' @importFrom utils head read.csv write.csv str
@@ -19,58 +19,87 @@
 #' @importFrom shiny isolate req renderPlot renderImage showNotification
 #' @importFrom org.Hs.eg.db org.Hs.eg.db
 #' @importFrom shinythemes shinytheme
-#' @importFrom org.Mm.eg.db org.Mm.eg.db
 #' @export
-mod_gsea_analysis <- function(input, output, session, data, res_reactive) {
+mod_gsea_analysis <- function(input, output, session, filtered_data_rv, res_reactive) {
 
   observeEvent(input$run_gsea, {
-    req(res_reactive(), input$gsea_db, input$lfc_threshold, input$padj_threshold, input$gsea_pvalue)
-
+    req(res_reactive(), input$gsea_db, input$lfc_threshold, input$padj_threshold, input$gsea_pvalue,filtered_data_rv$species)
+    showNotification("Starting GSEA Analysis", type = "message")
+    #print(filtered_data_rv$species)
     res <- res_reactive()
     res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), ]
     res$gene <- rownames(res)
-
-    if (!is_symbol(res$gene)) {
-      conv <- convert_ensembl_to_symbol(res$gene, data$species)
-      res$gene <- unname(conv[rownames(res)])
+    
+    # Convert gene identifiers to symbols
+    if (!is_symbol(rownames(res))) {
+      conv <- convert_ensembl_to_symbol(rownames(res), filtered_data_rv$species)
+      valid_idx <- !is.na(conv)
+      res <- res[valid_idx, , drop = FALSE]
+      res$gene <- conv[valid_idx]
+    } else {
+      res$gene <- rownames(res)
     }
-
-    d1 <- res[, c("log2FoldChange", "padj")]
-    d1$gene <- rownames(res)
-    gene_vector <- d1[abs(d1$log2FoldChange) >= input$lfc_threshold & d1$padj <= input$padj_threshold, ]
-    geneList <- gene_vector$log2FoldChange
-    names(geneList) <- gene_vector$gene
+    
+    # Keep only entries passing thresholds
+    res <- res[abs(res$log2FoldChange) >= input$lfc_threshold & res$padj <= input$padj_threshold, ]
+    res <- res[!is.na(res$gene), , drop = FALSE]
+    res$gene <- make.unique(res$gene)
+    
+    # Now create the gene list
+    geneList <- res$log2FoldChange
+    names(geneList) <- res$gene
     geneList <- sort(geneList, decreasing = TRUE)
-
-    species_name <- if (data$species == "Mus musculus") "Mus musculus" else "Homo sapiens"
+    geneList <- geneList[!duplicated(names(geneList))]
+    
+    
+    if (length(geneList) < 10) {
+      showNotification("Too few genes left after filtering or ID conversion for GSEA.", type = "error")
+      return()
+    }
+    
+    species_name <- if (filtered_data_rv$species == "Mus musculus") "Mus musculus" else "Homo sapiens"
     db_collection <- switch(input$gsea_db,
       "GO" = "C5",
       "KEGG" = "C2",
       "Reactome" = "C2",
-      "Hallmark" = "H"
+      "Hallmark" = "H",
+      "Cancer Cell Atlas" = "C4",
+      "Cancer Gene Neighbourhoods" ="C4",
+      "Cancer Modules" = "C4",
+      "Txn Factor Targets" = "C3"
     )
     db_subcollection <- switch(input$gsea_db,
       "GO" = "GO:BP",
-      "KEGG" = "CP:KEGG",
+      "KEGG" = "CP:KEGG_MEDICUS",
       "Reactome" = "CP:REACTOME",
-      "Hallmark" = NULL
+      "Hallmark" = NULL,
+      "Cancer Cell Atlas" = "3CA",
+      "Cancer Gene Neighbourhoods" ="CGN",
+      "Cancer Modules" = "CM",
+      "Txn Factor Targets" = "TFT:GTRD"
     )
 
     m_df <- msigdbr(species = species_name, collection = db_collection, subcollection = db_subcollection)
     term2gene <- m_df[, c("gs_name", "gene_symbol")]
     colnames(term2gene) <- c("ID", "gene")
-
-    gsea_result <- clusterProfiler::GSEA(
-      geneList = geneList,
-      TERM2GENE = term2gene,
-      pvalueCutoff = input$gsea_pvalue,
-      verbose = FALSE
-    )
-
+    #print(head(geneList))
+    gsea_result <- tryCatch({
+      clusterProfiler::GSEA(
+        geneList = geneList,
+        TERM2GENE = term2gene,
+        pvalueCutoff = input$gsea_pvalue,
+        verbose = FALSE
+      )
+    }, error = function(e) {
+      showNotification(paste("GSEA failed:", e$message), type = "error")
+      return(NULL)
+    })
+    
     if (is.null(gsea_result) || nrow(as.data.frame(gsea_result)) < 1) {
-      showNotification("No enriched terms found in GSEA.", type = "warning")
+      showNotification("No enriched terms found in GSEA or analysis failed.", type = "warning")
       return()
     }
+    
     updateSelectInput(session, "gsea_selected_pathway", choices = gsea_result@result$ID)
     output$gseaDotPlot <- renderPlot({
       gsea_result@result$.sign <- ifelse(gsea_result@result$NES > 0, "Activated", "Inhibited")
@@ -87,7 +116,7 @@ mod_gsea_analysis <- function(input, output, session, data, res_reactive) {
     })
 
     output$download_gsea_dot_plot <- downloadHandler(
-      filename = function() { "gsea_dot_plot.pdf" },
+      filename = function() { paste0("GSEA_",input$gsea_db,"_dot_plot.pdf", sep="")  },
       content = function(file) {
         pdf(file)
         gsea_result@result$.sign <- ifelse(gsea_result@result$NES > 0, "Activated", "Inhibited")
@@ -132,7 +161,7 @@ mod_gsea_analysis <- function(input, output, session, data, res_reactive) {
     })
     
     output$download_gsea_upset_plot <- downloadHandler(
-      filename = function() { "GSEA_upset_plot.pdf" },
+      filename = function() { paste0("GSEA_",input$gsea_db,"_upset_plot.pdf", sep="") },
       content = function(file) {
         pdf(file)
         print(enrichplot::upsetplot(gsea_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
@@ -143,7 +172,7 @@ mod_gsea_analysis <- function(input, output, session, data, res_reactive) {
       datatable(as.data.frame(gsea_result), options = list(scrollX = TRUE))
     })
     output$download_gsea_table <- downloadHandler(
-      filename = function() { "gsea_results.csv" },
+      filename = function() { paste0("GSEA_",input$gsea_db,"_result.csv", sep="")  },
       content = function(file) {
         write.csv(as.data.frame(gsea_result), file, row.names = FALSE)
       }
@@ -151,6 +180,5 @@ mod_gsea_analysis <- function(input, output, session, data, res_reactive) {
   })
 }
 
-# === Register in server ===
-# mod_gsea_analysis(input, output, session, data, res_reactive)
+
 

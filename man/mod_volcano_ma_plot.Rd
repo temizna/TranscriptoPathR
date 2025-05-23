@@ -4,7 +4,7 @@
 \alias{mod_volcano_ma_plot}
 \title{Volcano and MA Plot Module}
 \usage{
-mod_volcano_ma_plot(input, output, session, res_reactive, data)
+mod_volcano_ma_plot(input, output, session, res_reactive, filtered_data_rv)
 }
 \arguments{
 \item{input}{Shiny input object}
@@ -15,7 +15,7 @@ mod_volcano_ma_plot(input, output, session, res_reactive, data)
 
 \item{res_reactive}{ReactiveVal containing DE results}
 
-\item{data}{ReactiveValues (used for species info)}
+\item{filtered_data_rv}{(used for species info)}
 }
 \value{
 None. Renders plots and download handlers

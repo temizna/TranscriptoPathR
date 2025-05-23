@@ -4,7 +4,14 @@
 \alias{mod_differential_expression}
 \title{Differential Expression Module}
 \usage{
-mod_differential_expression(input, output, session, data, dds_rv, res_reactive)
+mod_differential_expression(
+  input,
+  output,
+  session,
+  filtered_data_rv,
+  filtered_dds_rv,
+  res_reactive
+)
 }
 \arguments{
 \item{input}{Shiny input object}
@@ -13,9 +20,9 @@ mod_differential_expression(input, output, session, data, dds_rv, res_reactive)
 
 \item{session}{Shiny session object}
 
-\item{data}{ReactiveValues with counts, samples, norm_counts, species}
+\item{filtered_data_rv}{a reactive list with counts, samples, norm_counts, species}
 
-\item{dds_rv}{ReactiveVal holding DESeqDataSet}
+\item{filtered_dds_rv}{a reactive valaue holding DESeqDataSet}
 
 \item{res_reactive}{ReactiveVal to store DESeq2 result}
 }
