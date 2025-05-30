@@ -1,0 +1,15 @@
+[2025-05-30 14:35:24] User clicked load_data
+Parameters: data_mode: upload; counts_file: subread_counts.trimmed.csv, 6680709, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//Rtmp3y69yE/51aa079ec9b7b69161454c79/0.csv; design_file: Conditions.csv, 1647, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//Rtmp3y69yE/4c21dab2fbf307bef6b9f801/0.csv; design_formula: ~ treatment; species: Homo sapiens
+[2025-05-30 14:35:25] User clicked sample_select-select_all
+[2025-05-30 14:36:13] User clicked run_de
+Parameters: metadata_column: treatment; reference_condition: None; test_condition: Abema; lfc_threshold: 1; padj_threshold: 0.05; num_genes: 100; cluster_columns: TRUE
+[2025-05-30 14:37:08] User clicked run_crossplot
+Parameters: crossplot_gene_label: ; metadata_column_x: treatment; reference_condition_x: None; test_condition_x: Abema; metadata_column_y: treatment; reference_condition_y: LTED; test_condition_y: LTED+Abema; crossplot_gene_count: 2000; crossplot_topgenes: 15
+[2025-05-30 14:47:38] User clicked run_pathway
+Parameters: pathway_db: Reactome; pathway_direction: Up; circular_layout: circle; lfc_threshold: 1; padj_threshold: 0.05; pathway.qval: 0.1; max_genes: 500
+[2025-05-30 14:51:14] User clicked run_pathway
+Parameters: pathway_db: GO; pathway_direction: Up; circular_layout: circle; lfc_threshold: 1; padj_threshold: 0.05; pathway.qval: 0.1; max_genes: 500
+[2025-05-30 14:51:42] User clicked run_pathway
+Parameters: pathway_db: Reactome; pathway_direction: Both; circular_layout: circle; lfc_threshold: 1; padj_threshold: 0.05; pathway.qval: 0.1; max_genes: 500
+[2025-05-30 14:53:59] User clicked run_pathway
+Parameters: pathway_db: KEGG; pathway_direction: Both; circular_layout: circle; lfc_threshold: 1; padj_threshold: 0.05; pathway.qval: 0.1; max_genes: 500

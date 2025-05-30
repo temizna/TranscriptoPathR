@@ -364,7 +364,16 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
       showNotification("No pathway enrichment results available.", type = "error")
       return(NULL)
     } else {
-      return(enrichplot::dotplot(formula_res, x = "category"))
+      method <- input$cross_enrich_method
+      if (method == "groupGO") {
+        return(
+          enrichplot::dotplot(formula_res, x = "category") +
+            ggplot2::scale_fill_manual(values = "steelblue") +
+            ggplot2::labs(fill = NULL)
+        )
+      } else {
+        return(enrichplot::dotplot(formula_res, x = "category"))
+      }
     }
   }
   

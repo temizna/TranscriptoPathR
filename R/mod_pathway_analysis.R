@@ -72,8 +72,13 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
     }
     print("Starting Pathway Analysis")
     if (input$pathway_db == "GO") {
-      pathway_result <- clusterProfiler::enrichGO(gene = selected_genes, OrgDb = orgdb, keyType = "ENTREZID", ont = "BP", pAdjustMethod = "BH", pvalueCutoff = input$padj_threshold,
-                                 qvalueCutoff  = input$pathway.qval,readable  = TRUE)
+      pathway_result <- tryCatch({
+        clusterProfiler::enrichGO(gene = selected_genes, OrgDb = orgdb, keyType = "ENTREZID", ont = "BP", pAdjustMethod = "BH",
+                                  pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval, readable = TRUE)
+      }, error = function(e) {
+        showNotification(paste("GO enrichment failed:", e$message), type = "error")
+        NULL
+      })
     } else if (input$pathway_db == "KEGG") {
       kegg_sp <- if( filtered_data$species == "Homo sapiens") "hsa" else "mmu"
       x <- clusterProfiler::enrichKEGG(gene = selected_genes, organism = kegg_sp, pvalueCutoff = input$padj_threshold,qvalueCutoff =  input$pathway.qval)
@@ -116,12 +121,12 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
         plot_enrichment_chart = FALSE
       ))
     } else if (input$pathway_db == "DOSE") {
-      pathway_result <- DOSE::enrichDO(
-        gene = selected_genes,
-        ont = "DO",
-        pvalueCutoff = input$padj_threshold,
-        qvalueCutoff = input$pathway.qval,
-        readable = TRUE) 
+      pathway_result <- tryCatch({
+        DOSE::enrichDO(gene = selected_genes, ont = "DO", pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval, readable = TRUE)
+      }, error = function(e) {
+        showNotification(paste("DOSE enrichment failed:", e$message), type = "error")
+        NULL
+      })
     } else {
       pathway_result <- tryCatch({
         x <- enrichPathway(gene = selected_genes, organism = get_reactome_code(filtered_data$species), pvalueCutoff = input$padj_threshold,
@@ -319,13 +324,24 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
     req(pathway_result)
     
     df <- as.data.frame(pathway_result)
-    if (is.null(df) || nrow(df) < 2 || is.null(pathway_result@termsim) || all(pathway_result@termsim == 0)) {
-      showNotification("No valid term similarity available for emapplot.", type = "warning")
+    if (is.null(df) || nrow(df) < 2 || !"ID" %in% colnames(df) || !"geneID" %in% colnames(df)) {
+      showNotification("Insufficient enrichment terms or missing columns for emapplot.", type = "warning")
       return(NULL)
     }
     
-    enrichplot::emapplot(pathway_result, showCategory = 10)
+    if (is.null(pathway_result@termsim) || all(is.na(pathway_result@termsim)) || all(pathway_result@termsim == 0)) {
+      showNotification("No valid term similarity matrix for emapplot.", type = "warning")
+      return(NULL)
+    }
+    
+    tryCatch({
+      enrichplot::emapplot(pathway_result, showCategory = 10)
+    }, error = function(e) {
+      showNotification(paste("emapplot failed:", e$message), type = "error")
+      NULL
+    })
   })
+  
   
 
   output$download_emap_plot <- downloadHandler(
