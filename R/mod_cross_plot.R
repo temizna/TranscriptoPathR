@@ -311,7 +311,54 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
       filter(!is.na(log2FoldChange_x) & !is.na(ENTREZID))
     
     # Perform pathway analysis
-    formula_res <- compareCluster(ENTREZID ~ category, data = df_merged2, fun = "enrichKEGG")
+    if (input$cross_enrich_method == "enrichGO") {
+      formula_res <- clusterProfiler::compareCluster(
+        ENTREZID ~ category,
+        data = df_merged2,
+        fun = "enrichGO",
+        OrgDb = orgdb,
+        keyType = "ENTREZID",
+        ont = "BP",
+        pAdjustMethod = "BH",
+        pvalueCutoff = 0.05,
+        qvalueCutoff = 0.2,
+        readable = TRUE
+      )
+    } else if (input$cross_enrich_method == "groupGO") {
+      formula_res <- clusterProfiler::compareCluster(
+        ENTREZID ~ category,
+        data = df_merged2,
+        fun = "groupGO",
+        OrgDb = orgdb,
+        ont = "BP",
+        keyType = "ENTREZID",
+        readable = TRUE
+      )
+    } else if (input$cross_enrich_method == "enrichKEGG") {
+      kegg_sp <- if (species == "Homo sapiens") "hsa" else "mmu"
+      formula_res <- clusterProfiler::compareCluster(
+        ENTREZID ~ category,
+        data = df_merged2,
+        fun = "enrichKEGG",
+        organism = kegg_sp,
+        pvalueCutoff = 0.05,
+        qvalueCutoff = 0.2
+      )
+    } else if (input$cross_enrich_method == "enrichPathway") {
+      reactome_code <- get_reactome_code(species)
+      formula_res <- clusterProfiler::compareCluster(
+        ENTREZID ~ category,
+        data = df_merged2,
+        fun = ReactomePA::enrichPathway,
+        organism = reactome_code,
+        pvalueCutoff = 0.05,
+        qvalueCutoff = 0.2,
+        readable = TRUE
+      )
+    } else {
+      showNotification("Unsupported enrichment method selected.", type = "error")
+      return(NULL)
+    }
     
     if (is.null(formula_res) || nrow(formula_res) == 0) {
       showNotification("No pathway enrichment results available.", type = "error")

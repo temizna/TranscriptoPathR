@@ -66,8 +66,7 @@ mod_qc_plot <- function(input, output, session, data) {
       mat <- as.matrix(dist_matrix)
       rownames(mat) <- colnames(data$norm_counts)
       colnames(mat) <- colnames(data$norm_counts)
-      ComplexHeatmap::Heatmap(mat, name = "Distance",  column_names_gp = grid::gpar(fontsize = 4),
-                              width = unit(20, "cm"), height = unit(20, "cm"))
+      ComplexHeatmap::Heatmap(mat, name = "Distance",  column_names_gp = grid::gpar(fontsize = 4))
 
     } else if (input$qc_plot_type == "Mean-Variance") {
       means <- rowMeans(data$norm_counts)

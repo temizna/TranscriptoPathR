@@ -45,18 +45,25 @@ mod_goi_heatmap <- function(input, output, session, filtered_data_rv) {
     
     if (is_ensembl_id(available_genes)) {
       symbol_to_ens <- convert_symbol_to_ensembl(selected_genes, species)
-      found_genes <- unname(symbol_to_ens)
-      found_genes <- found_genes[!is.na(found_genes) & found_genes %in% available_genes]
+      found_ens <- unname(symbol_to_ens)
+      matched_symbols <- names(symbol_to_ens)
+      
+      # Keep only valid mapped genes that exist in the data
+      valid_idx <- !is.na(found_ens) & found_ens %in% available_genes
+      found_genes <- found_ens[valid_idx]
+      matched_symbols <- matched_symbols[valid_idx]
+      
+      # Assign user symbols to rownames
+      names(found_genes) <- matched_symbols
+      
+      expr <- log2(filtered_data_rv$norm_counts[found_genes, , drop = FALSE] + 1)
+      rownames(expr) <- names(found_genes)  # <- Use symbols as rownames
     } else {
       found_genes <- selected_genes[selected_genes %in% available_genes]
+      expr <- log2(filtered_data_rv$norm_counts[found_genes, , drop = FALSE] + 1)
+      rownames(expr) <- found_genes  # <- Set to symbols
     }
     
-    if (length(found_genes) == 0) {
-      showNotification("None of the uploaded genes matched the dataset.", type = "error")
-      return()
-    }
-    
-    expr <- log2(filtered_data_rv$norm_counts[found_genes, , drop = FALSE] + 1)
     
     group_values <- filtered_data_rv$samples[[1]]
     group_levels <- unique(group_values)

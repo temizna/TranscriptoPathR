@@ -78,20 +78,43 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
       kegg_sp <- if( filtered_data$species == "Homo sapiens") "hsa" else "mmu"
       x <- clusterProfiler::enrichKEGG(gene = selected_genes, organism = kegg_sp, pvalueCutoff = input$padj_threshold,qvalueCutoff =  input$pathway.qval)
       pathway_result <- setReadable(x, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+      # Prepare pathfindR input (after enrichKEGG)
+      gene_syms <- d1_merged$gene[match(selected_genes, d1_merged$ENTREZID)]
+      padjs <- d1_merged$padj[match(selected_genes, d1_merged$ENTREZID)]
+      
+      # Convert Ensembl IDs if needed
+      if (is_ensembl_id(gene_syms)) {
+        gene_syms_converted <- convert_ensembl_to_symbol(gene_syms, species = filtered_data$species)
+        gene_syms <- gene_syms_converted
+      }
+      # Filter valid entries
+      valid_idx <- !is.na(gene_syms) & !is.na(padjs) & padjs >= 0 & padjs <= 1
+      # Assemble pathfindR input
       pathfindR_input <- data.frame(
-      Gene.symbol = d1_merged$gene[match(selected_genes, d1_merged$ENTREZID)],
-      logFC = geneList[selected_genes],
-      adj.P.Val = d1_merged$padj[match(selected_genes, d1_merged$ENTREZID)]
-    )
-    pathfindR_input <- pathfindR_input[order(pathfindR_input$adj.P.Val), ]
-    if (nrow(pathfindR_input) > 1000) pathfindR_input <- head(pathfindR_input, 1000)
-    pathway_input_rv(pathfindR_input)
-    kegg_pathway_results(pathfindR::run_pathfindR(
-      input = pathfindR_input,
-      gene_sets = "KEGG",
-      output_dir = file.path(getwd(), "kegg_pathview_outputs"),
-      plot_enrichment_chart = FALSE
-    )) 
+        Gene.symbol = gene_syms[valid_idx],
+        logFC = geneList[selected_genes][valid_idx],
+        adj.P.Val = padjs[valid_idx]
+      )
+      # Drop duplicated or NA gene symbols
+      pathfindR_input <- pathfindR_input[!is.na(pathfindR_input$Gene.symbol), ]
+      pathfindR_input <- pathfindR_input[!duplicated(pathfindR_input$Gene.symbol), ]
+      pathfindR_input <- pathfindR_input[order(pathfindR_input$adj.P.Val), ]
+      
+      # Limit to top 1000
+      if (nrow(pathfindR_input) > 1000) pathfindR_input <- head(pathfindR_input, 1000)
+      # Validate input before calling pathfindR
+      if (nrow(pathfindR_input) < 10) {
+        showNotification("Too few valid gene symbols for pathfindR.", type = "error")
+        return(NULL)
+      }
+      # Run pathfindR
+      pathway_input_rv(pathfindR_input)
+      kegg_pathway_results(pathfindR::run_pathfindR(
+        input = pathfindR_input,
+        gene_sets = "KEGG",
+        output_dir = file.path(getwd(), "kegg_pathview_outputs"),
+        plot_enrichment_chart = FALSE
+      ))
     } else if (input$pathway_db == "DOSE") {
       pathway_result <- DOSE::enrichDO(
         gene = selected_genes,
