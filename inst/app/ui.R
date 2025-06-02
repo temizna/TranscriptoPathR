@@ -182,9 +182,8 @@ ui <- fluidPage(
                  sliderInput("gsea_pvalue", "GSEA Q-value Cutoff", min = 0, max = 1, value = 0.20, step = 0.01),
                  downloadButton("download_gsea_table", "Download GSEA Table"),
                  downloadButton("download_gsea_dot_plot", "Download GSEA Dot Plot"),
-                 downloadButton("download_gsea_enrichment_plot", "Download GSEA Enrichment Plot"),
                  selectInput("gsea_selected_pathway", "Select Pathway for Enrichment Plot:", choices = NULL),
-                 downloadButton("download_gsea_enrichment_plot", "Download Enrichment Plot"),
+                 downloadButton("download_gsea_enrichment_plot", "Download GSEA Enrichment Plot"),
                  downloadButton("download_gsea_upset_plot", "Download Upset Plot"),
                  actionButton("run_gsea", "Run GSEA")
                ),
