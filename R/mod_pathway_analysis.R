@@ -40,9 +40,9 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
     d1$gene <- rownames(res)
 
     if (is_symbol(d1$gene)) {
-      d1_ids <- bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
+      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
     } else {
-      d1_ids <- bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)
+      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)})
     }
 
     d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)

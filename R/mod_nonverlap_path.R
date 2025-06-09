@@ -44,9 +44,9 @@ mod_pathway_analysis_non_overlap <- function(input, output, session, geneList_rv
     d1$gene <- rownames(res)
     
     if (is_symbol(d1$gene)) {
-      d1_ids <- bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
+      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
     } else {
-      d1_ids <- bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)
+      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)})
     }
     
     d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)
@@ -98,10 +98,10 @@ mod_pathway_analysis_non_overlap <- function(input, output, session, geneList_rv
     }
     
     result_df <- as.data.frame(pathway_result@result)
-    print("Columns in result_df:")
-    print(colnames(result_df))
-    print("Preview of result_df:")
-    print(head(result_df))
+    #print("Columns in result_df:")
+    #print(colnames(result_df))
+    #print("Preview of result_df:")
+    #print(head(result_df))
     
     if (is.null(result_df) ||
         !all(c("ID", "geneID") %in% colnames(result_df)) ||

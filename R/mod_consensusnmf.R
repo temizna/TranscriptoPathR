@@ -220,7 +220,7 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
       genes <- ifelse(!is.na(converted), converted, genes)
     }
     
-    entrez <- clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
+    entrez <- suppressMessages({clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
     term2gene <- dplyr::left_join(gene_pc_table, entrez, by = c("gene" = "SYMBOL")) %>%
       dplyr::select(pc, ENTREZID) %>%
       dplyr::filter(!is.na(ENTREZID))

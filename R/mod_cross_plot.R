@@ -28,7 +28,7 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
     req(filtered_data_rv$samples)
     samples<-filtered_data_rv$samples
     cols <- colnames(samples)
-    print(cols)
+    #print(cols)
     updateSelectInput(session, "metadata_column_x", choices = cols)
     updateSelectInput(session, "metadata_column_y", choices = cols)
   })
@@ -249,10 +249,10 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
     req(crossplot_data())
     df <- crossplot_data()
     #print(head(df$label))
-    p <- generate_cross_plot(df, input$crossplot_gene_count, 
+    p <- suppressMessages({generate_cross_plot(df, input$crossplot_gene_count, 
                              input$test_condition_x, input$reference_condition_x, 
-                             input$test_condition_y, input$reference_condition_y)
-    print(p)
+                             input$test_condition_y, input$reference_condition_y)})
+    print(suppressMessages({p}))
   })
   
   # Download handler for the cross plot
@@ -262,9 +262,9 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
     
       req(crossplot_data())
       df <- crossplot_data()
-      p <- generate_cross_plot(df, input$crossplot_gene_count, 
+      p <- suppressMessages({generate_cross_plot(df, input$crossplot_gene_count, 
                                input$test_condition_x, input$reference_condition_x, 
-                               input$test_condition_y, input$reference_condition_y)
+                               input$test_condition_y, input$reference_condition_y)})
       ggsave(file, p, width = 10, height = 8) 
     }
   )

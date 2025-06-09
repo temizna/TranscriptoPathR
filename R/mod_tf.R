@@ -61,12 +61,12 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
       tf_data <- tf_data %>%
         rename(TF_name = 1, target_gene = 2)
       
-      tf_data_entrez <- bitr(
+      tf_data_entrez <- suppressMessages({bitr(
         tf_data$target_gene,
         fromType = "SYMBOL",
         toType = "ENTREZID",
         OrgDb = org.Hs.eg.db
-      )
+      )})
       
       tf_data_gmt <- tf_data %>%
         dplyr::left_join(tf_data_entrez, by = c("target_gene" = "SYMBOL")) %>%
@@ -83,9 +83,9 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
       d1$gene <- toupper(rownames(res)) # converting mouse to human assuming similar gene names for ortologs
       
       if (is_symbol(d1$gene)) {
-        d1_ids <- bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
+        d1_ids <- suppressMessages({bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
       } else {
-        d1_ids <- bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)
+        d1_ids <- suppressMessages({bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)})
       }
       
       d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)

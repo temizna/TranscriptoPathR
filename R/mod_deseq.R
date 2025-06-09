@@ -53,8 +53,8 @@ mod_differential_expression <- function(input, output, session, filtered_data_rv
     dds[[input$metadata_column]] <- relevel(factor(dds[[input$metadata_column]]), ref = input$reference_condition)
     design(dds) <- as.formula(paste("~", input$metadata_column))
 
-    dds <- DESeq(dds)
-    res <- results(dds, contrast = c(input$metadata_column, input$test_condition, input$reference_condition))
+    dds <- suppressMessages(DESeq(dds))
+    res <- suppressMessages(results(dds, contrast = c(input$metadata_column, input$test_condition, input$reference_condition)))
 
     res$symbol <- rownames(res)
 

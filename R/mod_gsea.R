@@ -102,18 +102,49 @@ mod_gsea_analysis <- function(input, output, session, filtered_data_rv, res_reac
     
     updateSelectInput(session, "gsea_selected_pathway", choices = gsea_result@result$ID)
     output$gseaDotPlot <- renderPlot({
-      gsea_result@result$.sign <- ifelse(gsea_result@result$NES > 0, "Activated", "Inhibited")
+      req(gsea_result)
+      df <- gsea_result@result
+      df$.sign <- ifelse(df$NES > 0, "Activated", "Inhibited")
       color_by <- input$gsea_color_scale
-
-      if (input$gsea_split_dotplot && min(gsea_result@result$NES, na.rm = TRUE) < 0) {
-        enrichplot::dotplot(gsea_result, showCategory = input$gsea_top_n, split = ".sign", color = color_by) +
-          facet_grid(. ~ .sign) +
+      top_n <- input$gsea_top_n
+      
+      df <- head(df[order(df$p.adjust), ], top_n)
+      
+      if (color_by == "NES") {
+        df$coreSize <- sapply(strsplit(df$core_enrichment, "/"), length)
+        df$geneRatio <- df$coreSize / df$setSize  # GeneRatio equivalent
+        
+        p <- ggplot(df, aes(x = geneRatio, y = reorder(Description, geneRatio), size = coreSize, color = NES)) +
+          geom_point() +
+          scale_color_gradient2(low = "blue", high = "red", midpoint = 0) +
+          labs(
+            x = "Gene Ratio (coreSize / setSize)",
+            y = NULL,
+            color = "NES",
+            size = "Gene Count"
+          ) +
+          theme_minimal() +
           theme(axis.text.y = element_text(size = 6, face = "bold"))
+        if (input$gsea_split_dotplot && any(df$NES < 0, na.rm = TRUE)) {
+          p <- p + facet_wrap(~.sign)
+        }
+        return(p)
       } else {
-        enrichplot::dotplot(gsea_result, showCategory = input$gsea_top_n, color = color_by) +
-          theme(axis.text.y = element_text(size = 6, face = "bold"))
+        if (input$gsea_split_dotplot && any(df$NES < 0, na.rm = TRUE)) {
+          return(
+            enrichplot::dotplot(gsea_result, showCategory = top_n, split = ".sign", color = color_by) +
+              facet_grid(. ~ .sign) +
+              theme(axis.text.y = element_text(size = 6, face = "bold"))
+          )
+        } else {
+          return(
+            enrichplot::dotplot(gsea_result, showCategory = top_n, color = color_by) +
+              theme(axis.text.y = element_text(size = 6, face = "bold"))
+          )
+        }
       }
     })
+    
 
     output$download_gsea_dot_plot <- downloadHandler(
       filename = function() { paste0("GSEA_",input$gsea_db,"_dot_plot.pdf", sep="")  },

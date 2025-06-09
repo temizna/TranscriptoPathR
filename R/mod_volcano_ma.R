@@ -122,16 +122,16 @@ mod_volcano_ma_plot <- function(input, output, session, res_reactive, filtered_d
       label_genes <- convert_ensembl_to_symbol(label_genes, filtered_data_rv$species)
     }
     
-    p <- generate_volcano_plot(res, label_genes, top_genes, input$volcano_lfc, input$volcano_padj)
-    print(p)
+    p <- suppressMessages({generate_volcano_plot(res, label_genes, top_genes, input$volcano_lfc, input$volcano_padj)})
+    print(suppressMessages({p}))
   })
   
   # Render MA Plot
   output$maPlot <- renderPlot({
     req(res_reactive())
     res <- res_reactive()
-    p <- generate_ma_plot(res, input$volcano_lfc, input$volcano_padj)
-    print(p)
+    p <- suppressMessages({generate_ma_plot(res, input$volcano_lfc, input$volcano_padj)})
+    print(suppressMessages({p}))
   })
   
   # Volcano Plot Download Handler
@@ -146,7 +146,7 @@ mod_volcano_ma_plot <- function(input, output, session, res_reactive, filtered_d
       if (is_ensembl_id(res$symbol)) {
         label_genes <- convert_ensembl_to_symbol(label_genes, filtered_data_rv$species)
       }
-      p <-  generate_volcano_plot(res, label_genes, top_genes, input$volcano_lfc, input$volcano_padj)
+      p <-  suppressMessages({generate_volcano_plot(res, label_genes, top_genes, input$volcano_lfc, input$volcano_padj)})
       ggsave(file, p, device = "pdf", width = 10, height = 8)
     }
   )
