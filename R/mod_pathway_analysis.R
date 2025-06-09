@@ -82,7 +82,7 @@ mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_r
     } else if (input$pathway_db == "KEGG") {
       kegg_sp <- if( filtered_data$species == "Homo sapiens") "hsa" else "mmu"
       x <- clusterProfiler::enrichKEGG(gene = selected_genes, organism = kegg_sp, pvalueCutoff = input$padj_threshold,qvalueCutoff =  input$pathway.qval)
-      pathway_result <- setReadable(x, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+      pathway_result <- setReadable(x, OrgDb = orgdb, keyType="ENTREZID")
       # Prepare pathfindR input (after enrichKEGG)
       gene_syms <- d1_merged$gene[match(selected_genes, d1_merged$ENTREZID)]
       padjs <- d1_merged$padj[match(selected_genes, d1_merged$ENTREZID)]

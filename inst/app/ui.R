@@ -75,7 +75,9 @@ ui <- fluidPage(
                  downloadButton("download_qc_plot", "Download Plot")
                ),
                mainPanel(
-                 plotOutput("qcPlot")
+                 plotOutput("qcPlot"),
+                 br(),
+                 textOutput("qcPlotDescription")
                )
              )
     ),  
@@ -95,7 +97,7 @@ ui <- fluidPage(
     tabPanel("Differential Expression",
              sidebarLayout(
                sidebarPanel(
-                 selectInput("metadata_column", "Metadata Column:", choices = NULL),
+                 selectInput("metadata_column", "Variable to test:", choices = NULL),
                  selectInput("reference_condition", "Reference Condition:", choices = NULL),
                  selectInput("test_condition", "Test Condition:", choices = NULL),
                  sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
@@ -135,10 +137,10 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  textInput("crossplot_gene_label", "Enter Gene(s) (space-separated):", value = ""),
-                 selectInput("metadata_column_x", "X-axis Metadata Column:", choices = NULL),
+                 selectInput("metadata_column_x", "X-axis Variable to test:", choices = NULL),
                  selectInput("reference_condition_x", "X-axis Reference Condition:", choices = NULL),
                  selectInput("test_condition_x", "X-axis Test Condition:", choices = NULL),
-                 selectInput("metadata_column_y", "Y-axis Metadata Column:", choices = NULL),
+                 selectInput("metadata_column_y", "Y-axis Variable to test:", choices = NULL),
                  selectInput("reference_condition_y", "Y-axis Reference Condition:", choices = NULL),
                  selectInput("test_condition_y", "Y-axis Test Condition:", choices = NULL),
                  numericInput("crossplot_gene_count", "Top N Genes to Plot:", value = 2000, min = 10, max = 5000, step = 10),
@@ -173,7 +175,7 @@ ui <- fluidPage(
                  #selectInput("gsea_metadata_column", "Metadata Column:", choices = NULL),
                  #selectInput("gsea_reference_condition", "Reference Condition:", choices = NULL),
                  #selectInput("gsea_test_condition", "Test Condition:", choices = NULL),
-                 selectInput("gsea_color_scale", "Dot Plot Color By:", choices = c("p.adjust", "pvalue","qvalue"), selected = "pvalue"),
+                 selectInput("gsea_color_scale", "Dot Plot Color By:", choices = c("p.adjust", "pvalue","qvalue", "NES"), selected = "pvalue"),
                  selectInput("gsea_db", "Select Database:", choices = c("GO", "KEGG", "Reactome", "Hallmark","Cancer Cell Atlas",
                                                                         "Cancer Gene Neighbourhoods", "Cancer Modules","Txn Factor Targets")),
                  numericInput("gsea_top_n", "Top N Pathways to Show in GSEA Table:", value = 10, min = 1, max = 50),

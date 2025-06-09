@@ -149,7 +149,7 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
       ComplexHeatmap::Heatmap(sample_corr,
                               name = "Sample Correlation",
                               cluster_rows = TRUE, cluster_columns = TRUE,
-                              width = unit(6, "in"), height = unit(6, "in"),
+                              width = unit(8, "in"), height = unit(8, "in"),
                               column_names_gp = grid::gpar(fontsize = 4))
     })
     
@@ -178,7 +178,7 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
             name = "Sample Corr",
             cluster_rows = TRUE,
             cluster_columns = TRUE,
-            width = unit(7, "in"), height = unit(7, "in"),
+            width = unit(8, "in"), height = unit(8, "in"),
             column_names_gp = grid::gpar(fontsize = 4),
             row_names_gp = grid::gpar(fontsize = 4)
           )

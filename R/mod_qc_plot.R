@@ -92,6 +92,18 @@ mod_qc_plot <- function(input, output, session, data) {
         scale_fill_brewer(palette = "Set1")
     }
   })
+  
+  output$qcPlotDescription <- renderText({
+    switch(input$qc_plot_type,
+           "PCA" = "Principal Component Analysis (PCA) highlights the variation in gene expression across samples.",
+           "Sample Distance" = "This heatmap shows pairwise distances between samples based on log2-normalized expression. 
+           It is a measure of similarity between samples.",
+           "Mean-Variance" = "This plot depicts the relationship between mean expression and variance across genes.",
+           "Variance Histogram" = "This histogram displays the distribution of gene expression variances by group.",
+           "Select a QC plot to view its description."
+    )
+  })
+  
 
   # Download handler for QC plot
   output$download_qc_plot <- downloadHandler(
