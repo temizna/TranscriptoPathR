@@ -65,7 +65,7 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
         tf_data$target_gene,
         fromType = "SYMBOL",
         toType = "ENTREZID",
-        OrgDb = org.Hs.eg.db
+        OrgDb = orgdb
       )})
       
       tf_data_gmt <- tf_data %>%
