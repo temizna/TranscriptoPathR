@@ -10,6 +10,7 @@
 #' @param output Shiny output object
 #' @param session Shiny session object
 #' @param res_reactive Reactive expression containing DE results (e.g., logFC, padj, etc.)
+#' @param filtered_data_rv Reactive list containing raw data
 #' @importFrom shiny req renderPlot renderUI actionButton showNotification downloadHandler 
 #' @importFrom VennDiagram venn.diagram
 #' @importFrom utils read.csv
