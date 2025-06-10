@@ -1,3 +1,0 @@
-[2025-05-13 20:59:07] User clicked load_data
-Parameters: data_mode: upload; counts_file: Full_MPNST_gene_name.csv, 10064694, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpKRQy1G/549efb0919abc97b56ee5186/0.csv; design_file: sample_spec.csv, 2848, text/csv, /var/folders/vm/frdqv3zj0hd6_18f5_00w7c40000gp/T//RtmpKRQy1G/458bfa53c580ab05d062691f/0.csv; design_formula: ~sample_type; species: Homo sapiens
-[2025-05-13 20:59:08] User clicked sample_select-select_all
