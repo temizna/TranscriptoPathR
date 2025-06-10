@@ -49,7 +49,8 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
     print("Running TF Enrichment Analysis...")
     tf_data_source <- input$tf_data_source
     print(paste("Selected TF data source:", tf_data_source))
-    
+    species <- filtered_data_rv$species
+    orgdb <- get_orgdb(species)
     tryCatch({
       # Load TF data using helper function
       tf_data <- load_tf_data(tf_data_source)
@@ -73,8 +74,7 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
         dplyr::select(TF_name, ENTREZID) %>%
         dplyr::filter(!is.na(ENTREZID))
       
-      species <- filtered_data_rv$species
-      orgdb <- get_orgdb(species)
+
       res <- isolate(res_reactive())
       direction <- input$gene_direction
       

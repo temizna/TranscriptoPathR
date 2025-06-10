@@ -1,4 +1,4 @@
-Package: TransriptoPathR
+Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
 Version: 0.1.0
 Authors@R: 
@@ -50,7 +50,7 @@ VignetteBuilder: knitr
 
 ---
 
-# TransriptoPathR
+# TranscriptoPathR
 
 **TransriptoPathR** is a comprehensive Shiny-based application for end-to-end RNA-Seq data analysis designed for bench scientists with no or minimal coding experience. It provides an interactive GUI for both novice and advanced users to perform quality control, normalization, differential expression, pathway analysis, and gene set enrichment analysis (GSEA) with no coding experience.
 
