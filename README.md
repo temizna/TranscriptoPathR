@@ -52,7 +52,7 @@ VignetteBuilder: knitr
 
 # TransriptoPathR
 
-**TransriptoPathR** is a comprehensive Shiny-based application for end-to-end RNA-Seq data analysis. It provides an interactive GUI for both novice and advanced users to perform quality control, normalization, differential expression, pathway analysis, and gene set enrichment analysis (GSEA) with minimal coding.
+**TransriptoPathR** is a comprehensive Shiny-based application for end-to-end RNA-Seq data analysis designed for bench scientists with no or minimal coding experience. It provides an interactive GUI for both novice and advanced users to perform quality control, normalization, differential expression, pathway analysis, and gene set enrichment analysis (GSEA) with no coding experience.
 
 ## ✨ Features
 
@@ -133,11 +133,10 @@ BiocManager::install(c(
 
 # Install pathfindR (if not already)
 install.packages("pathfindR")
-#DO NOT install immunedeconv too many dependencies
-#library(devtools) 
-#install_github("omnideconv/immunedeconv")
+install.packages("devtools")
+library(devtools) 
 # Clone or download this repo, then from root directory:
-devtools::install()
+install_github("temizna/TranscriptoPathR")
 ```
 
 ## 🚀 Running the App
@@ -145,7 +144,7 @@ devtools::install()
 After installation, launch the app from R or RStudio:
 
 ```r
-library(TransriptoPathR)
+library(TranscriptoPathR)
 TranscriptoPathR::run_app()
 ```
 
