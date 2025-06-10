@@ -14,6 +14,8 @@ mod_cancer_gene_census(input, output, session, res_reactive, filtered_data_rv)
 \item{session}{Shiny session object}
 
 \item{res_reactive}{Reactive expression containing DE results (e.g., logFC, padj, etc.)}
+
+\item{filtered_data_rv}{Reactive list containing raw data}
 }
 \description{
 This module compares differentially expressed genes (DEGs) from the DE results with a

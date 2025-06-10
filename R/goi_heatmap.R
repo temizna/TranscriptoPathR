@@ -18,6 +18,7 @@
 #' @importFrom ComplexHeatmap Heatmap HeatmapAnnotation draw
 #' @importFrom grDevices pdf dev.off
 #' @importFrom grid gpar
+#' @importFrom colorspace rainbow_hcl 
 #' @importFrom RColorBrewer brewer.pal
 #' @export
 mod_goi_heatmap <- function(input, output, session, filtered_data_rv) {
