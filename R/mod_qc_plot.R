@@ -30,17 +30,18 @@ mod_qc_plot <- function(input, output, session, data) {
     updateSelectInput(session, "group_select_qc", choices = colnames(data$samples))
   })
 
-  output$qcPlot <- renderPlot({
+  generate_qc_plot <- function(data, input) {
     req(input$qc_plot_type, data$samples, data$norm_counts)
+    
     group_col <- input$group_select_qc
-
+    
     if (!group_col %in% colnames(data$samples)) {
       showNotification("Please select a valid grouping column for QC.", type = "error")
       return(NULL)
     }
-
+    
     group_factor <- factor(data$samples[[group_col]])
-
+    
     if (input$qc_plot_type == "PCA") {
       expr <- log2(data$norm_counts + 1)
       expr <- expr[apply(expr, 1, function(x) var(x, na.rm = TRUE) > 0), , drop = FALSE]
@@ -53,45 +54,72 @@ mod_qc_plot <- function(input, output, session, data) {
         Sample = rownames(data$samples)
       )
       
-      ggplot(df, aes(x = PC1, y = PC2, color = Group, label = Sample)) +
-        geom_point(size = 3) +
-        #geom_text_repel(show.legend = FALSE, max.overlaps = if (input$show_labels) 100 else 0) +
-        xlab(paste0("PC1 (", percentVar[1], "%)")) +
-        ylab(paste0("PC2 (", percentVar[2], "%)")) +
-        theme_minimal() +
-        theme(axis.title = element_text(face = "bold")) +
-        scale_color_brewer(palette = "Set2")
+      return(
+        ggplot(df, aes(x = PC1, y = PC2, color = Group, label = Sample)) +
+          geom_point(size = 3) +
+          xlab(paste0("PC1 (", percentVar[1], "%)")) +
+          ylab(paste0("PC2 (", percentVar[2], "%)")) +
+          theme_minimal() +
+          theme(axis.title = element_text(face = "bold")) +
+          scale_color_brewer(palette = "Set2")
+      )
+      
     } else if (input$qc_plot_type == "Sample Distance") {
       dist_matrix <- dist(t(log2(data$norm_counts + 1)))
       mat <- as.matrix(dist_matrix)
       rownames(mat) <- colnames(data$norm_counts)
       colnames(mat) <- colnames(data$norm_counts)
-      ComplexHeatmap::Heatmap(mat, name = "Distance",  column_names_gp = grid::gpar(fontsize = 4))
-
+      return(
+        ComplexHeatmap::Heatmap(mat, name = "Distance", row_names_gp = grid::gpar(fontsize = 5)
+                                column_names_gp = grid::gpar(fontsize = 5))
+      )
+      
     } else if (input$qc_plot_type == "Mean-Variance") {
       means <- rowMeans(data$norm_counts)
       vars <- apply(data$norm_counts, 1, var)
       df <- data.frame(Mean = means, Variance = vars)
-      ggplot(df, aes(x = Mean, y = Variance)) +
-        geom_point(alpha = 0.5) +
-        scale_x_log10() +
-        scale_y_log10() +
-        theme_minimal() +
-        theme(axis.title = element_text(face = "bold")) +
-        labs(title = "Mean-Variance Plot", x = "Mean Expression", y = "Variance")
-
+      
+      return(
+        ggplot(df, aes(x = Mean, y = Variance)) +
+          geom_point(alpha = 0.5) +
+          scale_x_log10() +
+          scale_y_log10() +
+          theme_minimal() +
+          theme(axis.title = element_text(face = "bold")) +
+          labs(title = "Mean-Variance Plot", x = "Mean Expression", y = "Variance")
+      )
+      
     } else if (input$qc_plot_type == "Variance Histogram") {
       gene_vars <- apply(data$norm_counts, 1, var)
       df <- data.frame(Variance = gene_vars, Group = rep(group_factor, each = length(gene_vars)))
-      ggplot(df, aes(x = Variance, fill = Group)) +
-        geom_histogram(bins = 100, position = "identity", alpha = 0.6, color = "black") +
-        xlim(0, quantile(gene_vars, 0.99)) +
-        theme_minimal() +
-        theme(axis.title = element_text(face = "bold")) +
-        labs(title = "Variance Histogram by Group", x = "Variance", y = "Gene Count") +
-        scale_fill_brewer(palette = "Set1")
+      
+      return(
+        ggplot(df, aes(x = Variance, fill = Group)) +
+          geom_histogram(bins = 100, position = "identity", alpha = 0.6, color = "black") +
+          xlim(0, quantile(gene_vars, 0.99)) +
+          theme_minimal() +
+          theme(axis.title = element_text(face = "bold")) +
+          labs(title = "Variance Histogram by Group", x = "Variance", y = "Gene Count") +
+          scale_fill_brewer(palette = "Set1")
+      )
     }
+  }
+  
+  output$qcPlot <- renderPlot({
+    plot <- generate_qc_plot(data, input)
+    if (!is.null(plot)) print(plot)
   })
+  
+  output$download_qc_plot <- downloadHandler(
+    filename = function() paste0(input$qc_plot_filename),
+    content = function(file) {
+      pdf(file)
+      plot <- generate_qc_plot(data, input)
+      if (!is.null(plot)) print(plot)
+      dev.off()
+    }
+  )
+  
   
   output$qcPlotDescription <- renderText({
     switch(input$qc_plot_type,
@@ -104,19 +132,7 @@ mod_qc_plot <- function(input, output, session, data) {
     )
   })
   
-
-  # Download handler for QC plot
-  output$download_qc_plot <- downloadHandler(
-    filename = function() paste0(input$qc_plot_filename),
-    content = function(file) {
-      pdf(file)
-      p <- isolate(output$qcPlot())
-      if (!is.null(p)) print(p)
-      dev.off()
-    }
-  )
 }
-
 # === Register in server ===
 # mod_qc_plots(input, output, session, data)
 
