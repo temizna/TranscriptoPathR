@@ -70,7 +70,7 @@ mod_qc_plot <- function(input, output, session, data) {
       rownames(mat) <- colnames(data$norm_counts)
       colnames(mat) <- colnames(data$norm_counts)
       return(
-        ComplexHeatmap::Heatmap(mat, name = "Distance", row_names_gp = grid::gpar(fontsize = 5)
+        ComplexHeatmap::Heatmap(mat, name = "Distance", row_names_gp = grid::gpar(fontsize = 5),
                                 column_names_gp = grid::gpar(fontsize = 5))
       )
       
