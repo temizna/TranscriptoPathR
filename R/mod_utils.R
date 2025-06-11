@@ -31,7 +31,6 @@ convert_ensembl_to_symbol <- function(gene_ids, species = "Homo sapiens") {
 #' @param species Character string: either "Homo sapiens" or "Mus musculus"
 #'
 #' @return A named character vector with gene symbols as names and Ensembl IDs as values
-#' @importFrom AnnotationDbi select
 #' @export
 convert_symbol_to_ensembl <- function(gene_symbols, species = "Homo sapiens") {
   org_db <- get_orgdb(species)
