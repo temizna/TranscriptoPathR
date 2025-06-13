@@ -146,7 +146,6 @@ mod_logger_server <- function(id, input_all) {
   })
 }
 
-
 #' Logger Module UI
 #'
 #' @param id Shiny module id
