@@ -59,12 +59,8 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
     counts_df <- load_data_file(counts_file)
     design_df <- load_design_file(design_file)
     
-    # Ensure all samples match
-    # Find samples in design that are also in counts (preserve order of design)
     valid_sample_idx <- rownames(design_df) %in% colnames(counts_df)
     design_df <- design_df[valid_sample_idx, , drop = FALSE]
-    
-    # Now reorder columns in counts_df to match the design_df order
     counts_df <- counts_df[, rownames(design_df), drop = FALSE]
     
     excluded_design <- setdiff(rownames(design_df), colnames(counts_df))
@@ -75,20 +71,26 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
     if (length(excluded_counts) > 0)
       warning("Some samples in counts were not found in design: ", paste(excluded_counts, collapse = ", "))
     
-    # Ensure all factors are encoded properly
     rn <- rownames(design_df)
     design_df <- as.data.frame(lapply(design_df, function(col) {
       if (is.character(col) || is.logical(col)) factor(col) else col
     }))
     rownames(design_df) <- rn
-    #print(rownames(design_df))
-    # Filter genes: keep only sufficiently expressed and variable ones
+    
     counts_df <- counts_df[rowSums(counts_df) >= 10, , drop = FALSE]
     counts_df <- counts_df[apply(counts_df, 1, var) > 0.1, , drop = FALSE]
     
     if (nrow(counts_df) < 10) stop("Too few genes left after filtering. Check your input files.")
     
-    # Validate formula
+    # Sanitize and collapse rows with same gene ID per sample
+    clean_ids <- sanitize_ensembl_ids(rownames(counts_df))
+    counts_df$gene_id <- clean_ids
+    
+    counts_df <- as.data.frame(counts_df)
+    counts_df <- aggregate(. ~ gene_id, data = counts_df, FUN = sum)
+    rownames(counts_df) <- counts_df$gene_id
+    counts_df$gene_id <- NULL
+    
     formula <- as.formula(design_formula)
     required_vars <- all.vars(formula)[-1]
     if (!all(required_vars %in% colnames(design_df))) {
@@ -96,7 +98,6 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
            paste(setdiff(required_vars, colnames(design_df)), collapse = ", "))
     }
     
-    # DESeq2 object construction
     dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts_df, colData = design_df, design = formula)
     dds <- DESeq2::estimateSizeFactors(dds)
     norm_counts <- counts(dds, normalized = TRUE)

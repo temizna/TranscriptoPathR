@@ -46,7 +46,7 @@ mod_tf_enrichment_analysis <- function(input, output, session,res_reactive,filte
   # Observe button click
   observeEvent(input$run_tf_enrichment, {
     req(res_reactive(),filtered_data_rv$species)
-    print("Running TF Enrichment Analysis...")
+    print("TF Enrichment only works with human! Use caution! Running TF Enrichment Analysis...")
     tf_data_source <- input$tf_data_source
     print(paste("Selected TF data source:", tf_data_source))
     species <- filtered_data_rv$species

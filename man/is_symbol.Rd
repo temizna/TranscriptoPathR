@@ -7,11 +7,8 @@
 is_symbol(ids)
 }
 \arguments{
-\item{ids}{Character vector of gene identifiers}
-}
-\value{
-Logical indicating whether IDs are mostly gene symbols
+\item{ids}{Character vector of gene symbols}
 }
 \description{
-Heuristically determines whether gene IDs appear to be symbols rather than Ensembl.
+Check if IDs are gene symbols
 }

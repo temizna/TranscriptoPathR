@@ -7,11 +7,8 @@
 is_ensembl_id(ids)
 }
 \arguments{
-\item{ids}{Character vector of gene identifiers}
-}
-\value{
-Logical indicating whether majority of IDs resemble Ensembl format
+\item{ids}{Character vector of gene symbols}
 }
 \description{
-Checks whether a vector of gene IDs are mostly Ensembl IDs.
+Check if IDs are Ensembl
 }

@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.1.0
+Version: 0.9.0
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
@@ -114,6 +114,9 @@ VignetteBuilder: knitr
 
 - Homo sapiens
 - Mus musculus
+- Canis Familiaris
+- Rattus norvegicus
+- Saccharomyces cerevisiae 
 
 ## 📦 Installation
 
@@ -128,11 +131,9 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install(c(
   "DESeq2", "GEOquery", "Biobase", "clusterProfiler", "enrichplot",
   "ComplexHeatmap", "msigdbr", "ReactomePA", "pathview",
-  "org.Hs.eg.db", "org.Mm.eg.db", "AnnotationDbi"
+  "org.Hs.eg.db", "org.Mm.eg.db", "org.Sc.sgd.db","org.Cf.eg.db","org.Rn.eg.db","AnnotationDbi"
 ))
 
-# Install pathfindR (if not already)
-install.packages("pathfindR")
 install.packages("devtools")
 library(devtools) 
 # Clone or download this repo, then from root directory:

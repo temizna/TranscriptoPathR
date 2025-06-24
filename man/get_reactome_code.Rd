@@ -2,16 +2,13 @@
 % Please edit documentation in R/mod_utils.R
 \name{get_reactome_code}
 \alias{get_reactome_code}
-\title{Get Reactome Code from species name}
+\title{Get Reactome Code}
 \usage{
 get_reactome_code(species)
 }
 \arguments{
-\item{species}{Character string: either "Homo sapiens" or "Mus musculus"}
-}
-\value{
-Character Reactome organism code
+\item{species}{Character string}
 }
 \description{
-Returns the Reactome organism code for a given species.
+Get Reactome Code
 }

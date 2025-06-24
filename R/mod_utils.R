@@ -1,21 +1,14 @@
-# === Module: mod_utils ===
-
 #' Convert Ensembl IDs to Gene Symbols
 #'
-#' @description Converts Ensembl IDs to gene symbols using the appropriate OrgDb.
-#' 
 #' @param gene_ids Character vector of Ensembl IDs
-#' @param species Character string: either "Homo sapiens" or "Mus musculus"
-#'
-#' @return A named character vector with Ensembl IDs as names and gene symbols as values
-#' @importFrom stats setNames
-#' @importFrom shinythemes shinytheme
+#' @param species Character string
+#' @return Named character vector
 #' @export
 convert_ensembl_to_symbol <- function(gene_ids, species = "Homo sapiens") {
   org_db <- get_orgdb(species)
   id_type <- "ENSEMBL"
   res <- tryCatch({
-    AnnotationDbi::select(org_db, keys = gene_ids, columns = c("SYMBOL"), keytype = id_type)
+    AnnotationDbi::select(org_db, keys = gene_ids, columns = "SYMBOL", keytype = id_type)
   }, error = function(e) {
     warning("Ensembl to Symbol conversion failed:", e$message)
     return(NULL)
@@ -23,20 +16,18 @@ convert_ensembl_to_symbol <- function(gene_ids, species = "Homo sapiens") {
   out <- setNames(res$SYMBOL, res$ENSEMBL)
   return(out[!duplicated(names(out))])
 }
+
 #' Convert Gene Symbols to Ensembl IDs
 #'
-#' @description Converts gene symbols to Ensembl IDs using the appropriate OrgDb.
-#' 
 #' @param gene_symbols Character vector of gene symbols
-#' @param species Character string: either "Homo sapiens" or "Mus musculus"
-#'
-#' @return A named character vector with gene symbols as names and Ensembl IDs as values
+#' @param species Character string
+#' @return Named character vector
 #' @export
 convert_symbol_to_ensembl <- function(gene_symbols, species = "Homo sapiens") {
   org_db <- get_orgdb(species)
   id_type <- "SYMBOL"
   res <- tryCatch({
-    AnnotationDbi::select(org_db, keys = gene_symbols, columns = c("ENSEMBL"), keytype = id_type)
+    AnnotationDbi::select(org_db, keys = gene_symbols, columns = "ENSEMBL", keytype = id_type)
   }, error = function(e) {
     warning("Symbol to Ensembl conversion failed: ", e$message)
     return(NULL)
@@ -45,83 +36,85 @@ convert_symbol_to_ensembl <- function(gene_symbols, species = "Homo sapiens") {
   return(out[!duplicated(names(out))])
 }
 
-# Suppress global variable notes for NSE variables
 utils::globalVariables(c(
   "log2FoldChange", "padj", "label", "baseMean", "color",
-  "log2FoldChange_x", "log2FoldChange_y",
+  "log2FoldChange_x", "log2FoldChange_y","Gene",
   "PC1", "PC2", "Sample", "Group", "Mean", "Variance"
 ))
 
 #' Check if IDs are Ensembl
-#'
-#' @description Checks whether a vector of gene IDs are mostly Ensembl IDs.
-#'
-#' @param ids Character vector of gene identifiers
-#' @return Logical indicating whether majority of IDs resemble Ensembl format
+#' @param ids Character vector of gene symbols
 #' @export
 is_ensembl_id <- function(ids) {
-  mean(grepl("^ENSG\\d+|^ENSMUSG\\d+", ids)) > 0.5
+  mean(grepl("^ENSG\\d+|^ENSMUSG\\d+|^ENSRNOG\\d+|^ENSDOG\\d+|^Y[A-P][LR]\\d+", ids)) > 0.5
 }
 
 #' Get OrgDb object from species name
-#'
-#' @description Returns the appropriate OrgDb object for the given species.
-#'
-#' @param species Character string: either "Homo sapiens" or "Mus musculus"
-#' @return Corresponding OrgDb object
+#' @param species Character string
 #' @export
 get_orgdb <- function(species) {
-  if (species == "Homo sapiens") {
-    requireNamespace("org.Hs.eg.db")
-    return(org.Hs.eg.db)
-  } else if (species == "Mus musculus") {
-    requireNamespace("org.Mm.eg.db")
-    return(org.Mm.eg.db)
-  } else {
-    stop("Unsupported species")
-  }
+  switch(species,
+         "Homo sapiens" = org.Hs.eg.db::org.Hs.eg.db,
+         "Mus musculus" = org.Mm.eg.db::org.Mm.eg.db,
+       #  "Rattus norvegicus" = org.Rn.eg.db::org.Rn.eg.db,
+      #   "Saccharomyces cerevisiae" = org.Sc.sgd.db::org.Sc.sgd.db,
+     #    "Canis familiaris" = org.Cf.eg.db::org.Cf.eg.db,
+         stop("Unsupported species: ", species))
 }
 
-#' Get KEGG Code from species name
-#'
-#' @description Returns the KEGG organism code for a given species.
-#'
-#' @param species Character string: either "Homo sapiens" or "Mus musculus"
-#' @return Character KEGG organism code
+#' Get KEGG Code
+#' @param species Character string
 #' @export
 get_kegg_code <- function(species) {
-  if (species == "Homo sapiens") {
-    return("hsa")
-  } else if (species == "Mus musculus") {
-    return("mmu")
-  } else {
-    stop("Unsupported species")
-  }
+  switch(species,
+         "Homo sapiens" = "hsa",
+         "Mus musculus" = "mmu",
+         "Rattus norvegicus" = "rno",
+         "Saccharomyces cerevisiae" = "sce",
+         "Canis familiaris" = "cfa",
+         stop("Unsupported species for KEGG: ", species))
 }
-#' Get Reactome Code from species name
-#'
-#' @description Returns the Reactome organism code for a given species.
-#'
-#' @param species Character string: either "Homo sapiens" or "Mus musculus"
-#' @return Character Reactome organism code
+
+#' Get Reactome Code
+#' @param species Character string
 #' @export
 get_reactome_code <- function(species) {
-  if (species == "Homo sapiens") {
-    return("human")  # Use "human" for Reactome
-  } else if (species == "Mus musculus") {
-    return("mouse")  # Use "mouse" for Reactome
-  } else {
-    return("human")  # Default to human if species is not recognized
-  }
+  switch(species,
+         "Homo sapiens" = "human",
+         "Mus musculus" = "mouse")
+         #"Rattus norvegicus" = "rat",
+         #"Canis familiaris" = "dog",
+         # Yeast not supported by Reactome
+         #"Saccharomyces cerevisiae" = "human",  # fallback
 }
+
 #' Check if IDs are gene symbols
-#'
-#' @description Heuristically determines whether gene IDs appear to be symbols rather than Ensembl.
-#'
-#' @param ids Character vector of gene identifiers
-#' @return Logical indicating whether IDs are mostly gene symbols
+#' @param ids Character vector of gene symbols
 #' @export
 is_symbol <- function(ids) {
-  mean(!grepl("^ENSG|^ENSMUSG", ids)) > 0.5
+  mean(!grepl("^ENS", ids)) > 0.5
+}
+#' Sanitize Ensembl Gene IDs
+#'
+#' This function standardizes Ensembl gene identifiers by removing version suffixes
+#' (e.g., ".1") and trimming composite IDs that include gene symbols (e.g., "ENSG00000141510_TP53").
+#'
+#' These modifications help ensure compatibility with annotation databases and enrichment tools.
+#'
+#' @param ids A character vector of Ensembl gene IDs, potentially with version suffixes
+#' or appended gene symbols.
+#'
+#' @return A character vector of cleaned Ensembl gene IDs.
+#'
+#' @examples
+#' sanitize_ensembl_ids(c("ENSG00000141510.1", "ENSG00000141510_TP53", "ENSG00000141510.2_TP53"))
+#' # Returns: "ENSG00000141510" "ENSG00000141510" "ENSG00000141510"
+#'
+#' @export
+sanitize_ensembl_ids <- function(ids) {
+  ids <- as.character(ids)
+  ids <- gsub("\\.\\d+$", "", ids)         # remove version suffix
+  ids <- gsub("_.*$", "", ids)             # remove gene symbol suffix
+  ids
 }
 

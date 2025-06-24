@@ -7,11 +7,8 @@
 get_orgdb(species)
 }
 \arguments{
-\item{species}{Character string: either "Homo sapiens" or "Mus musculus"}
-}
-\value{
-Corresponding OrgDb object
+\item{species}{Character string}
 }
 \description{
-Returns the appropriate OrgDb object for the given species.
+Get OrgDb object from species name
 }

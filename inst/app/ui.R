@@ -13,7 +13,7 @@ ui <- fluidPage(
                    # Inside your "Upload Data" tabPanel
                    textInput("design_formula", "Study Design Formula (you can put main column name. If more than one use + between names", value = "~ condition"),
                    selectInput("species", "Select Species", 
-                               choices = c("Homo sapiens", "Mus musculus"),
+                               choices = c("Homo sapiens", "Mus musculus"),# "Rattus norvegicus", "Saccharomyces cerevisiae", "Canis familiaris"),
                                selected = "Homo sapiens"),
                    actionButton("load_data", "Load Data"),
                    downloadButton("download_counts_template", "Download Counts Template"),
@@ -90,6 +90,7 @@ ui <- fluidPage(
       sidebarLayout(
         sidebarPanel(
           fileInput("goi_file", "Upload Gene List (CSV, single column)"),
+          selectInput("goi_group_column", "Group annotation variable:", choices = NULL),
           checkboxInput("cluster_columns", "Cluster Columns", value = TRUE)
         ),
         mainPanel(
@@ -176,16 +177,13 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  checkboxInput("gsea_split_dotplot", "Split Dot Plot by Activation State", value = TRUE),
-                 #selectInput("gsea_metadata_column", "Metadata Column:", choices = NULL),
-                 #selectInput("gsea_reference_condition", "Reference Condition:", choices = NULL),
-                 #selectInput("gsea_test_condition", "Test Condition:", choices = NULL),
                  selectInput("gsea_color_scale", "Dot Plot Color By:", choices = c("p.adjust", "pvalue","qvalue", "NES"), selected = "pvalue"),
                  selectInput("gsea_db", "Select Database:", choices = c("GO", "KEGG", "Reactome", "Hallmark","Cancer Cell Atlas",
                                                                         "Cancer Gene Neighbourhoods", "Cancer Modules","Txn Factor Targets")),
                  numericInput("gsea_top_n", "Top N Pathways to Show in GSEA Table:", value = 10, min = 1, max = 50),
                  sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 8, value = 1, step = 0.25, ticks = TRUE),
                  sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
-                 sliderInput("gsea_pvalue", "GSEA Q-value Cutoff", min = 0, max = 1, value = 0.20, step = 0.01),
+                 sliderInput("gsea_pvalue", "GSEA Q-value threshold for enrichment", min = 0, max = 1, value = 0.20, step = 0.01),
                  downloadButton("download_gsea_table", "Download GSEA Table"),
                  downloadButton("download_gsea_dot_plot", "Download GSEA Dot Plot"),
                  selectInput("gsea_selected_pathway", "Select Pathway for Enrichment Plot:", choices = NULL),
@@ -213,7 +211,7 @@ ui <- fluidPage(
                  selectInput("circular_layout", "Circular Plot Layout:", choices = c("circle", "kk", "mds"), selected = "circle"),
                  sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
                  sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
-                 sliderInput("pathway.qval", "Pathway Q-value:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE), 
+                 sliderInput("pathway.qval", "Pathway Q-value threshold for enrichment:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE), 
                  numericInput("max_genes", "Max Genes For Pathway Analysis:", value = 1000, min = 100, max = 1500, step = 100),
                  actionButton("run_pathway", "Run Pathway Analysis"),
                  downloadButton("download_dot_plot", "Download Dot Plot"),
@@ -289,7 +287,7 @@ ui <- fluidPage(
                  selectInput("gene_direction", "Direction:", choices = c("Up", "Down", "Both")),
                  sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
                  sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
-                 sliderInput("tf.qval", "TF Q-value:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE),
+                 sliderInput("tf.qval", "TF Q-value threshold for enrichment:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE),
                  actionButton("run_tf_enrichment", "Run TF Enrichment"),
                  downloadButton("download_tf_dotplot", "Download Dot Plot"),
                  downloadButton("download_tf_ridgeplot", "Download Ridge Plot"),

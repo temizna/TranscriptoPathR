@@ -2,16 +2,13 @@
 % Please edit documentation in R/mod_utils.R
 \name{get_kegg_code}
 \alias{get_kegg_code}
-\title{Get KEGG Code from species name}
+\title{Get KEGG Code}
 \usage{
 get_kegg_code(species)
 }
 \arguments{
-\item{species}{Character string: either "Homo sapiens" or "Mus musculus"}
-}
-\value{
-Character KEGG organism code
+\item{species}{Character string}
 }
 \description{
-Returns the KEGG organism code for a given species.
+Get KEGG Code
 }

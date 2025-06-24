@@ -24,6 +24,9 @@
 #' @importFrom tidyselect all_of
 #' @importFrom shiny validate need
 #' @importFrom utils install.packages
+#' @importFrom graphics abline 
+#' @importFrom stats TukeyHSD  aov complete.cases median p.adjust reorder setNames
+#' @importFrom utils read.delim read.table
 #' @export
 mod_gene_expression_plot <- function(input, output, session, filtered_data_rv) {
   
@@ -93,6 +96,7 @@ mod_gene_expression_plot <- function(input, output, session, filtered_data_rv) {
     available_genes <- rownames(filtered_data$norm_counts)
     
     if (is_ensembl_id(available_genes)) {
+      
       symbol_to_ens <- convert_symbol_to_ensembl(selected_genes, species)
       matched_symbols <- names(symbol_to_ens)
       found_genes <- unname(symbol_to_ens)

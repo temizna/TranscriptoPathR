@@ -11,7 +11,6 @@
 #'   }
 #'
 #' @return None (called for its side effects to render plots and outputs in Shiny)
-#' @importFrom NMF nmf nmfEstimateRank basis extractFeatures coefmap consensusmap predict
 #' @importFrom ComplexHeatmap Heatmap draw HeatmapAnnotation
 #' @importFrom clusterProfiler compareCluster enrichGO enrichKEGG enrichDO groupGO bitr
 #' @importFrom ReactomePA enrichPathway
@@ -146,12 +145,16 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
     scores <- pca_obj$x[, 1:num_pcs, drop = FALSE]
     sample_corr <- cor(t(scores))
     output$pca_sample_heatmap <- renderPlot({
-      ComplexHeatmap::Heatmap(sample_corr,
-                              name = "Sample Correlation",
-                              cluster_rows = TRUE, cluster_columns = TRUE,
-                              width = unit(8, "in"), height = unit(8, "in"),
-                              column_names_gp = grid::gpar(fontsize = 4))
-    })
+      ht <- ComplexHeatmap::Heatmap(
+        sample_corr,
+        name = "Sample Correlation",
+        cluster_rows = TRUE, cluster_columns = TRUE,
+        column_names_gp = grid::gpar(fontsize = 5),
+        row_names_gp = grid::gpar(fontsize = 5)
+      )
+      ComplexHeatmap::draw(ht)
+    }, height = 800, width = 800)
+    
     
     # Reconstructed matrix using selected PCs
     reconstruction <- pca_obj$x[, 1:num_pcs, drop = FALSE] %*% t(pca_obj$rotation[, 1:num_pcs, drop = FALSE])
@@ -171,21 +174,20 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
     output$download_sample_correlation_heatmap <- downloadHandler(
       filename = function() paste0("PCA_sample_correlation_heatmap_", Sys.Date(), ".pdf"),
       content = function(file) {
-        pdf(file, width=9, height = 11)
-        ComplexHeatmap::draw(
-          ComplexHeatmap::Heatmap(
-            sample_corr,
-            name = "Sample Corr",
-            cluster_rows = TRUE,
-            cluster_columns = TRUE,
-            width = unit(8, "in"), height = unit(8, "in"),
-            column_names_gp = grid::gpar(fontsize = 4),
-            row_names_gp = grid::gpar(fontsize = 4)
-          )
+        pdf(file, width = 11, height = 14)  # larger canvas
+        ht <- ComplexHeatmap::Heatmap(
+          sample_corr,
+          name = "Sample Corr",
+          cluster_rows = TRUE,
+          cluster_columns = TRUE,
+          column_names_gp = grid::gpar(fontsize = 5),
+          row_names_gp = grid::gpar(fontsize = 5)
         )
+        ComplexHeatmap::draw(ht, heatmap_legend_side = "right", annotation_legend_side = "right")
         dev.off()
       }
     )
+    
     output$download_reconstructed_heatmap <- downloadHandler(
       filename = function() paste0("PCA_reconstructed_heatmap_", Sys.Date(), ".pdf"),
       content = function(file) {
@@ -215,22 +217,55 @@ mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
     species <- filtered_data_rv$species
     orgdb <- get_orgdb(species)
     genes <- unique(gene_pc_table$gene)
+    
     if (!is_symbol(genes)) {
       converted <- convert_ensembl_to_symbol(genes, species = species)
       genes <- ifelse(!is.na(converted), converted, genes)
     }
     
-    entrez <- suppressMessages({clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
+    entrez <- suppressMessages({
+      clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
+    })
+    
     term2gene <- dplyr::left_join(gene_pc_table, entrez, by = c("gene" = "SYMBOL")) %>%
       dplyr::select(pc, ENTREZID) %>%
       dplyr::filter(!is.na(ENTREZID))
     
     enrich_fun <- switch(input$pca_enrich_method,
-                         "groupGO" = function(...) enrichGO(OrgDb = orgdb, ...),
-                         "enrichGO" = function(...) enrichGO(OrgDb = orgdb, ...),
-                         "enrichKEGG" = function(...) enrichKEGG(organism = ifelse(species == "Homo sapiens", "hsa", "mmu"), ...),
-                         "enrichDO" = enrichDO,
-                         "enrichPathway" = enrichPathway)
+                         "groupGO" = if (species %in% c("Homo sapiens", "Mus musculus", "Rattus norvegicus", "Canis familiaris", "Saccharomyces cerevisiae")) {
+                           function(...) enrichGO(OrgDb = orgdb, ...)
+                         } else {
+                           showNotification("groupGO is not supported for this species", type = "error")
+                           return(NULL)
+                         },
+                         "enrichGO" = if (species %in% c("Homo sapiens", "Mus musculus", "Rattus norvegicus", "Canis familiaris", "Saccharomyces cerevisiae")) {
+                           function(...) enrichGO(OrgDb = orgdb, ...)
+                         } else {
+                           showNotification("enrichGO is not supported for this species", type = "error")
+                           return(NULL)
+                         },
+                         "enrichKEGG" = {
+                           kegg_code <- tryCatch(get_kegg_code(species), error = function(e) NULL)
+                           if (is.null(kegg_code)) {
+                             showNotification("KEGG enrichment is not supported for this species.", type = "error")
+                             return(NULL)
+                           }
+                           function(...) enrichKEGG(organism = kegg_code, ...)
+                         },
+                         "enrichDO" = if (species == "Homo sapiens") {
+                           enrichDO
+                         } else {
+                           showNotification("DO enrichment is only available for Homo sapiens.", type = "error")
+                           return(NULL)
+                         },
+                         "enrichPathway" = if (species %in% c("Homo sapiens", "Mus musculus")) {
+                           function(...) enrichPathway(organism = get_reactome_code(species), ...)
+                         } else {
+                           showNotification("Reactome enrichment is only supported for human and mouse.", type = "error")
+                           return(NULL)
+                         }
+    )
+    
     
     res <- tryCatch({
       compareCluster(ENTREZID ~ pc, data = term2gene, fun = enrich_fun)

@@ -9,11 +9,11 @@ convert_symbol_to_ensembl(gene_symbols, species = "Homo sapiens")
 \arguments{
 \item{gene_symbols}{Character vector of gene symbols}
 
-\item{species}{Character string: either "Homo sapiens" or "Mus musculus"}
+\item{species}{Character string}
 }
 \value{
-A named character vector with gene symbols as names and Ensembl IDs as values
+Named character vector
 }
 \description{
-Converts gene symbols to Ensembl IDs using the appropriate OrgDb.
+Convert Gene Symbols to Ensembl IDs
 }

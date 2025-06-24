@@ -89,18 +89,36 @@ mod_differential_expression <- function(input, output, session, filtered_data_rv
     # Extract and log-transform expression data for the top genes
     expr <- filtered_data$norm_counts[rownames(top_genes), ]
     expr <- log2(expr + 1)
-    # Get the metadata for grouping
-    group_values <- filtered_data$samples[[metadata_column]]
+    # # Get the metadata for grouping
+    # group_values <- filtered_data$samples[[metadata_column]]
+    # group_levels <- unique(group_values)
+    # 
+    # # Define color palette for the groups
+    # palette <- colorRampPalette(brewer.pal(8, "Set2"))(length(group_levels))
+    # 
+    # # Create Heatmap Annotation
+    # ha <- ComplexHeatmap::HeatmapAnnotation(
+    #   df = data.frame(Group = group_values),
+    #   col = list(Group = setNames(palette, group_levels))
+    # )
+    group_values <- as.character(filtered_data$samples[[metadata_column]])
     group_levels <- unique(group_values)
+    if (length(group_levels) == 1) {
+      palette <- setNames("#1f78b4", group_levels)
+    } else if (length(group_levels) == 2) {
+      palette <- setNames(RColorBrewer::brewer.pal(3, "Dark2")[1:2], group_levels)
+    } else if (length(group_levels) <= 8) {
+      palette <- setNames(RColorBrewer::brewer.pal(length(group_levels), "Dark2"), group_levels)
+    } else {
+      palette <- setNames(colorspace::rainbow_hcl(length(group_levels)), group_levels)
+    }
+    names(palette) <- group_levels
     
-    # Define color palette for the groups
-    palette <- colorRampPalette(brewer.pal(8, "Set2"))(length(group_levels))
-    
-    # Create Heatmap Annotation
     ha <- ComplexHeatmap::HeatmapAnnotation(
-      df = data.frame(Group = group_values),
-      col = list(Group = setNames(palette, group_levels))
+      df = data.frame(Group = factor(group_values, levels = group_levels)),
+      col = list(Group = palette)
     )
+    
     
     # Cluster columns based on user input or default to TRUE
     cluster_cols <- if (!is.null(cluster_columns)) cluster_columns else TRUE
@@ -132,13 +150,16 @@ mod_differential_expression <- function(input, output, session, filtered_data_rv
     expr <- filtered_data_rv$norm_counts[rownames(top_genes), ]
     expr <- log2(expr + 1)
     
-    group_values <- filtered_data_rv$samples[[metadata_column]]
+    group_values <- as.character(filtered_data_rv$samples[[metadata_column]])
     group_levels <- unique(group_values)
-    if (length(group_levels) <= 8) {
-      palette <- RColorBrewer::brewer.pal(length(group_levels), "Dark2")
+    if (length(group_levels) == 1) {
+      palette <- setNames("#1f78b4", group_levels)
+    } else if (length(group_levels) == 2) {
+      palette <- setNames(RColorBrewer::brewer.pal(3, "Dark2")[1:2], group_levels)
+    } else if (length(group_levels) <= 8) {
+      palette <- setNames(RColorBrewer::brewer.pal(length(group_levels), "Dark2"), group_levels)
     } else {
-      # Fallback to rainbow_hcl for more groups
-      palette <- colorspace::rainbow_hcl(length(group_levels))
+      palette <- setNames(colorspace::rainbow_hcl(length(group_levels)), group_levels)
     }
     
     # Create Heatmap Annotation

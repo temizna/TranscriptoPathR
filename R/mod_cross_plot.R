@@ -272,30 +272,24 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
   
   # Download handlers for both plots
   generate_cross_pathway_plot <- function(crossplot_data, species) {
-    # Defensive handling: auto-default to "Homo sapiens" if species is missing
     if (is.null(species) || species == "" || is.na(species)) {
       species <- "Homo sapiens"
       showNotification("Species not specified. Defaulting to Homo sapiens.", type = "warning")
     }
     
     df <- crossplot_data
-    
-    # Get organism database
     orgdb <- get_orgdb(species)
     
-    # Top N significant genes by combined adjusted p-values
     df$combined_padj <- pmax(df$padj_x, df$padj_y, na.rm = TRUE)
     df$category <- "Other"
     df$category[df$log2FoldChange_x >= 1 & df$log2FoldChange_y >= 1] <- "Up-Up"
     df$category[df$log2FoldChange_x <= -1 & df$log2FoldChange_y <= -1] <- "Down-Down"
-    df$category[abs(df$log2FoldChange_x) >= 1 & df$log2FoldChange_y < 1 & df$log2FoldChange_y > -1] <- "Comp1-only"
-    df$category[df$log2FoldChange_x < 1 & df$log2FoldChange_x > -1 & abs(df$log2FoldChange_y) >= 1] <- "Comp2-only"
+    df$category[abs(df$log2FoldChange_x) >= 1 & abs(df$log2FoldChange_y) < 1] <- "Comp1-only"
+    df$category[abs(df$log2FoldChange_x) < 1 & abs(df$log2FoldChange_y) >= 1] <- "Comp2-only"
     df$category[df$log2FoldChange_x >= 1 & df$log2FoldChange_y <= -1] <- "Up-Down"
     df$category[df$log2FoldChange_x <= -1 & df$log2FoldChange_y >= 1] <- "Down-Up"
-    
     df <- df[df$category != "Other", ]
     
-    # Convert gene symbols to ENTREZ IDs
     if (is_symbol(df$gene)) {
       df_ids <- bitr(df$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)
     } else {
@@ -304,78 +298,63 @@ mod_cross_plot <- function(input, output, session, filtered_data_rv, filtered_dd
     
     df_merged <- merge(df, df_ids, by.x = "gene", by.y = 1)
     df_merged <- dplyr::distinct(df_merged, ENTREZID, .keep_all = TRUE)
-    df_merged <- df_merged[abs(df_merged$log2FoldChange_x) >= 1, ]
-    
     df_merged2 <- df_merged[, c("ENTREZID", "log2FoldChange_x", "category")]
-    df_merged2 <- df_merged2 %>%
-      filter(!is.na(log2FoldChange_x) & !is.na(ENTREZID))
+    df_merged2 <- df_merged2[complete.cases(df_merged2), ]
     
-    # Perform pathway analysis
-    if (input$cross_enrich_method == "enrichGO") {
-      formula_res <- clusterProfiler::compareCluster(
-        ENTREZID ~ category,
-        data = df_merged2,
-        fun = "enrichGO",
-        OrgDb = orgdb,
-        keyType = "ENTREZID",
-        ont = "BP",
-        pAdjustMethod = "BH",
-        pvalueCutoff = 0.05,
-        qvalueCutoff = 0.2,
-        readable = TRUE
+    # Enrichment
+    method <- input$cross_enrich_method
+    if (method == "enrichGO") {
+      if (!species %in% c("Homo sapiens", "Mus musculus", "Rattus norvegicus", "Canis familiaris", "Saccharomyces cerevisiae")) {
+        showNotification("GO enrichment is not supported for this species.", type = "error")
+        return(NULL)
+      }
+      formula_res <- compareCluster(
+        ENTREZID ~ category, data = df_merged2, fun = "enrichGO",
+        OrgDb = orgdb, keyType = "ENTREZID", ont = "BP",
+        pAdjustMethod = "BH", pvalueCutoff = 0.05, qvalueCutoff = 0.2, readable = TRUE
       )
-    } else if (input$cross_enrich_method == "groupGO") {
-      formula_res <- clusterProfiler::compareCluster(
-        ENTREZID ~ category,
-        data = df_merged2,
-        fun = "groupGO",
-        OrgDb = orgdb,
-        ont = "BP",
-        keyType = "ENTREZID",
-        readable = TRUE
+    } else if (method == "groupGO") {
+      if (!species %in% c("Homo sapiens", "Mus musculus", "Rattus norvegicus")) {
+        showNotification("groupGO is only supported for human, mouse, and rat.", type = "error")
+        return(NULL)
+      }
+      formula_res <- compareCluster(
+        ENTREZID ~ category, data = df_merged2, fun = "groupGO",
+        OrgDb = orgdb, keyType = "ENTREZID", ont = "BP", readable = TRUE
       )
-    } else if (input$cross_enrich_method == "enrichKEGG") {
-      kegg_sp <- if (species == "Homo sapiens") "hsa" else "mmu"
-      formula_res <- clusterProfiler::compareCluster(
-        ENTREZID ~ category,
-        data = df_merged2,
-        fun = "enrichKEGG",
-        organism = kegg_sp,
-        pvalueCutoff = 0.05,
-        qvalueCutoff = 0.2
+    } else if (method == "enrichKEGG") {
+      if (!species %in% c("Homo sapiens", "Mus musculus", "Rattus norvegicus", "Canis familiaris", "Saccharomyces cerevisiae")) {
+        showNotification("KEGG enrichment is not supported for this species.", type = "error")
+        return(NULL)
+      }
+      kegg_sp <- get_kegg_code(species)
+      formula_res <- compareCluster(
+        ENTREZID ~ category, data = df_merged2, fun = "enrichKEGG",
+        organism = kegg_sp, pvalueCutoff = 0.05, qvalueCutoff = 0.2
       )
-    } else if (input$cross_enrich_method == "enrichPathway") {
+    } else if (method == "enrichPathway") {
+      if (!species %in% c("Homo sapiens", "Mus musculus")) {
+        showNotification("Reactome enrichment is only supported for human and mouse.", type = "error")
+        return(NULL)
+      }
       reactome_code <- get_reactome_code(species)
-      formula_res <- clusterProfiler::compareCluster(
-        ENTREZID ~ category,
-        data = df_merged2,
-        fun = ReactomePA::enrichPathway,
-        organism = reactome_code,
-        pvalueCutoff = 0.05,
-        qvalueCutoff = 0.2,
-        readable = TRUE
+      formula_res <- compareCluster(
+        ENTREZID ~ category, data = df_merged2, fun = ReactomePA::enrichPathway,
+        organism = reactome_code, pvalueCutoff = 0.05, qvalueCutoff = 0.2, readable = TRUE
       )
     } else {
       showNotification("Unsupported enrichment method selected.", type = "error")
       return(NULL)
     }
     
-    if (is.null(formula_res) || nrow(formula_res) == 0) {
+    if (is.null(formula_res) || nrow(as.data.frame(formula_res)) == 0) {
       showNotification("No pathway enrichment results available.", type = "error")
       return(NULL)
-    } else {
-      method <- input$cross_enrich_method
-      if (method == "groupGO") {
-        return(
-          enrichplot::dotplot(formula_res, x = "category") +
-            ggplot2::scale_fill_manual(values = "steelblue") +
-            ggplot2::labs(fill = NULL)
-        )
-      } else {
-        return(enrichplot::dotplot(formula_res, x = "category"))
-      }
     }
+    
+    enrichplot::dotplot(formula_res, x = "category")
   }
+  
   
   
   # Render the Cross Pathway Plot

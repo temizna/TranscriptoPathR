@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.7.0
+Version: 0.9.0
 Authors@R: person("Alpay", "Temiz", email = "temizna@umn.edu", role = c("aut", "cre"))
 Description: 
     TranscriptoPathR provides an interactive Shiny interface for complete RNA-Seq analysis,
@@ -36,7 +36,6 @@ Imports:
     ComplexHeatmap,
     msigdbr,
     ReactomePA,
-    pathfindR,
     ggrepel,
     tibble,
     circlize,
@@ -45,8 +44,10 @@ Imports:
     vroom,
     org.Hs.eg.db,
     org.Mm.eg.db,
+    org.Rn.eg.db, 
+    org.Cf.eg.db, 
+    org.Sc.sgd.db,
     DOSE,
-    NMF,
     colorspace,
 Suggests:
     testthat,
