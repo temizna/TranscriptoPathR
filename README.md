@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.9.0
+Version: 0.9.1
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
@@ -64,7 +64,7 @@ VignetteBuilder: knitr
 
 - **Gene Expression Visualization**  
   - Boxplots of selected genes grouped by metadata categories
-
+  - Table of one-way ANOVA comparison between groups for selected genes followed by Tukey's HSD test.
 - **Quality Control (QC)**  
   - PCA, sample distance heatmaps, mean-variance plots, variance histograms
 - **Genes of interest Heatmap Visualization**
@@ -72,9 +72,8 @@ VignetteBuilder: knitr
 
 - **Differential Expression Analysis**  
   - DESeq2-based analysis with customizable thresholds and conditions
+  - Heatmap of top differentially expressed genes 
   - Users can download DE table.
-- **Heatmap**  
-  - Top DE genes with hierarchical clustering and group annotations
 
 - **Volcano and MA Plots**  
   - Visualization of differential expression results with gene labeling
