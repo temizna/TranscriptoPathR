@@ -113,9 +113,6 @@ VignetteBuilder: knitr
 
 - Homo sapiens
 - Mus musculus
-- Canis Familiaris
-- Rattus norvegicus
-- Saccharomyces cerevisiae 
 
 ## 📦 Installation
 
@@ -204,8 +201,6 @@ run_app <- function() {
   library(ReactomePA)
   library(enrichplot)
   library(GEOquery)
-  library(pathview)
-  library(pathfindR)
   library(ComplexHeatmap)
   library(org.Hs.eg.db)
   library(org.Mm.eg.db)
