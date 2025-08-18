@@ -1,5 +1,5 @@
 ui <- fluidPage(
-  theme = shinythemes::shinytheme("flatly"),
+  theme = shinythemes::shinytheme("lumen"),
   titlePanel("TranscriptoPathR: An R Shiny App to Anaylze RNASeq data"),
   tabsetPanel(
     tabPanel("Load Your Data",
