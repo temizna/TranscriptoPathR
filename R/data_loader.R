@@ -1,6 +1,6 @@
-# === Module: mod_data_upload_design ===
-#' Data upload and design
-#' @description Load and process uploaded count and design files into DESeq2 objects
+# === Module: mod_data_load_design ===
+#' Data load and design
+#' @description Load and process loaded count and design files into DESeq2 objects
 #'
 #' @param input Shiny input object.
 #' @param output Shiny output object.
@@ -21,7 +21,7 @@
 #' @importFrom shinythemes shinytheme
 #' @importFrom utils install.packages
 #' @export
-mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_rv) {
+mod_data_load_design <- function(input, output, session, loaded_data_rv, dds_rv) {
   
   load_data_file <- function(file_input) {
     ext <- tolower(tools::file_ext(file_input$name))
@@ -55,7 +55,7 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
       }
     }
     
-  load_uploaded_data <- function(counts_file, design_file, design_formula) {
+  load_loaded_data <- function(counts_file, design_file, design_formula) {
     counts_df <- load_data_file(counts_file)
     design_df <- load_design_file(design_file)
     
@@ -130,11 +130,11 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
     }
   })
   
-  # Observe event for loading user-uploaded data
+  # Observe event for loading user-loaded data
   observeEvent(input$load_data, {
     req(input$counts_file, input$design_file, input$design_formula)
     tryCatch({
-      loaded <- load_uploaded_data(input$counts_file, input$design_file, input$design_formula)
+      loaded <- load_loaded_data(input$counts_file, input$design_file, input$design_formula)
       
       loaded_data_rv$counts <- loaded$counts
       loaded_data_rv$samples <- loaded$samples
@@ -197,12 +197,12 @@ mod_data_upload_design <- function(input, output, session, loaded_data_rv, dds_r
     str(diag)
   })
   
-  output$uploaded_counts <- renderDT({
+  output$loaded_counts <- renderDT({
     req(loaded_data_rv$counts)
     datatable(loaded_data_rv$counts)
   })
   
-  output$uploaded_design <- renderDT({
+  output$loaded_design <- renderDT({
     req(loaded_data_rv$samples)
     datatable(loaded_data_rv$samples)
   })

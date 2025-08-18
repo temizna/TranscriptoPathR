@@ -2,14 +2,14 @@ ui <- fluidPage(
   theme = shinythemes::shinytheme("flatly"),
   titlePanel("TranscriptoPathR: An R Shiny App to Anaylze RNASeq data"),
   tabsetPanel(
-    tabPanel("Upload Data",
+    tabPanel("Load Your Data",
              sidebarLayout(
                sidebarPanel(
-                 radioButtons("data_mode", "Data Mode", choices = c("Upload Your Own" = "upload", "Use Demo Data" = "demo"), selected = "upload"),
+                 radioButtons("data_mode", "Data Mode", choices = c("Load Your Own" = "load", "Use Demo Data" = "demo"), selected = "load"),
                  conditionalPanel(
-                   condition = "input.data_mode == 'upload'",
-                   fileInput("counts_file", "Upload RNA-Seq Counts File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
-                   fileInput("design_file", "Upload Design/Metadata File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
+                   condition = "input.data_mode == 'load'",
+                   fileInput("counts_file", "Load RNA-Seq Counts File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
+                   fileInput("design_file", "Load Design/Metadata File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
                    # Inside your "Upload Data" tabPanel
                    textInput("design_formula", "Study Design Formula (you can put main column name. If more than one use + between names", value = "~ condition"),
                    selectInput("species", "Select Species", 

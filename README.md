@@ -129,11 +129,12 @@ BiocManager::install(c(
   "ComplexHeatmap", "msigdbr", "ReactomePA", "pathview",
   "org.Hs.eg.db", "org.Mm.eg.db", "org.Sc.sgd.db","org.Cf.eg.db","org.Rn.eg.db","AnnotationDbi"
 ))
-
+```
+```r
 install.packages("devtools")
 library(devtools) 
 # Clone or download this repo, then from root directory:
-install_github("temizna/TranscriptoPathR")
+install_github("temizna/TranscriptoPathR", force=TRUE)
 ```
 
 ## 🚀 Running the App
