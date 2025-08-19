@@ -20,7 +20,7 @@ filtered_data_rv <- reactiveValues()
 filtered_dds_rv <- reactiveVal()
 geneListU_rv <-reactiveVal()
 # Register module
-mod_data_upload_design(input, output, session, loaded_data_rv,dds_rv)
+mod_data_load_design(input, output, session, loaded_data_rv,dds_rv)
 callModule(mod_sample_select_dynamic, "sample_select",
            dds_rv = dds_rv,
            loaded_data_rv = loaded_data_rv,

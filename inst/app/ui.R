@@ -31,6 +31,31 @@ ui <- fluidPage(
                          If using more than one column name, use + e.g. ~condition+time. 
                          If multiple column names are used and they do not vary accors other conditions and samples DESEQ will return an error!
                          To fix this error remove the column name that does not vary."),
+                 tags$hr(),
+                 fluidRow(
+                   column(
+                     width = 6,
+                     tags$figure(
+                       tags$img(
+                         src = "sample_sheet_guide.png",
+                         class = "guide-img",
+                         alt = "Valid sample/metadata sheet with required columns highlighted"
+                       ),
+                       tags$figcaption("Sample/Design Sheet: rows = samples; columns = metadata (e.g., condition, batch).")
+                     )
+                   ),
+                   column(
+                     width = 6,
+                     tags$figure(
+                       tags$img(
+                         src = "expression_matrix_guide.png",
+                         class = "guide-img",
+                         alt = "Valid counts matrix with genes as rows and samples as columns"
+                       ),
+                       tags$figcaption("Counts Matrix: rows = genes; columns = samples. First column = gene IDs.")
+                     )
+                   )
+                 ),
                  DT::DTOutput("uploaded_counts"),
                  DT::DTOutput("uploaded_design")
                )
