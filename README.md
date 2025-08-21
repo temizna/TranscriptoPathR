@@ -98,7 +98,10 @@ VignetteBuilder: knitr
 - **GSEA (Gene Set Enrichment Analysis)**  
   - Supports MSigDB collections: Hallmark, GO, KEGG, Reactome  
   - Dot plots, enrichment plots,  and enrichment tables
-
+- **GSVA/ssGSVA (single sample Gene Set Variation Analysis)
+  - Volcano plots
+  - Sample by pathway heatmap
+  - Box plots of top pathways 	
 - **Transcirption Factor Enrichment Analysis**
   -TRANSFAC and JASPAR, ENCODE and ChEA, TRUSST, hTFtarget and TFLink databases can be used to test for transciprtion factor enrichment
   - Dot plots and   ridgeplots
