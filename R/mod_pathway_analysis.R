@@ -1,455 +1,303 @@
-#' Pathway Analysis Module
+#' Pathway Analysis Server (namespaced, full logic)
 #'
-#' This module handles pathway enrichment analysis using clusterProfiler and visualizations using enrichplot and pathfindR.
-#'
-#' @param input Shiny input
-#' @param output Shiny output
-#' @param session Shiny session
-#' @param filtered_data_rv a list containing counts, norm_counts, samples, species
-#' @param geneList_rv ReactiveVal for log2FC vector
-#' @param kegg_pathway_results ReactiveVal for KEGG pathway analysis result
-#' @param d1_merged_rv Reactive Data frame containing gene symbols, logFC, and padj
-#' @param res_reactive ReactiveVal holding DESeq2 results
-#' @param pathway_result_rv Reactive pathway result data frame
-#' @importFrom utils head read.csv write.csv str
-#' @importFrom stats as.formula dist model.matrix prcomp quantile relevel var cor na.omit
-#' @importFrom grDevices dev.off pdf colorRampPalette
-#' @importFrom grid gpar
-#' @importFrom clusterProfiler bitr
-#' @importFrom clusterProfiler enrichKEGG enrichGO
-#' @importFrom ReactomePA enrichPathway
-#' @importFrom org.Hs.eg.db org.Hs.eg.db 
-#' @importFrom shinythemes shinytheme
-#' @importFrom DOSE enrichDO
+#' @param id module id (must match mod_pathway_tab_ui)
+#' @param filtered_data_rv reactiveValues with $counts, $norm_counts, $samples, $species
+#' @param res_reactive reactiveVal holding DESeq2 results (data.frame)
+#' @param geneList_rv reactiveVal to store named log2FC vector (ENTREZID -> log2FC)
+#' @param kegg_pathway_results reactiveVal (kept for compatibility; not required here)
+#' @param d1_merged_rv reactiveVal to store merged df (gene, log2FC, padj, ENTREZID)
+#' @param pathway_result_rv reactiveVal to store the enrichment result object
+##' @param de_sel (optional) list returned by mod_de_server(), providing ref/test levels for filenames
 #' @export
-mod_pathway_analysis <- function(input, output, session, filtered_data_rv, res_reactive, geneList_rv, kegg_pathway_results, d1_merged_rv, pathway_result_rv) {
-
-  observeEvent(input$run_pathway, {
-    filtered_data<-filtered_data_rv
-    showNotification("Starting Pathway Analysis", type = "message")
-
-    species <- filtered_data$species
-    #print(species)
-    orgdb <- get_orgdb(species)
-    res <- isolate(res_reactive())
-    direction <- input$pathway_direction
+mod_pathway_server <- function(
+    id,
+    filtered_data_rv,
+    res_reactive,
+    geneList_rv,
+    kegg_pathway_results,
+    d1_merged_rv,
+    de_sel = NULL,
+    pathway_result_rv
+) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
-    res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), ]
-    d1 <- res[, c("log2FoldChange", "padj")]
-    d1$gene <- rownames(res)
+    # ---- Run enrichment ------------------------------------------------------
+    observeEvent(input$run_pathway, {
+      shiny::req(filtered_data_rv$species, res_reactive())
+      shiny::showNotification("Starting Pathway Analysis", type = "message")
+      
+      species   <- filtered_data_rv$species
+      orgdb     <- .get_orgdb(species)
+      if (is.null(orgdb)) {
+        shiny::showNotification("Could not load OrgDb for selected species.", type = "error")
+        return()
+      }
+      
+      res <- res_reactive()
+      res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), ]
+      d1  <- res[, c("log2FoldChange", "padj"), drop = FALSE]
+      d1$gene <- rownames(res)
+      
+      # Gene ID mapping -> ENTREZID
+      from_type <- if (.is_symbol(d1$gene)) "SYMBOL" else "ENSEMBL"
+      d1_ids <- suppressMessages({
+        clusterProfiler::bitr(d1$gene, fromType = from_type, toType = "ENTREZID", OrgDb = orgdb)
+      })
+      if (is.null(d1_ids) || nrow(d1_ids) == 0) {
+        shiny::showNotification("No genes could be mapped to ENTREZ IDs.", type = "error"); return()
+      }
+      
+      d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)
+      d1_merged <- d1_merged[!duplicated(d1_merged$ENTREZID), ]
+      d1_merged_rv(d1_merged)
+      
+      # Direction subset
+      dir <- input$pathway_direction
+      keep <- switch(
+        dir,
+        "Up"   = d1_merged$log2FoldChange >=  input$lfc_threshold & d1_merged$padj <= input$padj_threshold,
+        "Down" = d1_merged$log2FoldChange <= -input$lfc_threshold & d1_merged$padj <= input$padj_threshold,
+        # Both
+        abs(d1_merged$log2FoldChange) >= input$lfc_threshold & d1_merged$padj <= input$padj_threshold
+      )
+      gene_vector <- d1_merged[keep & !is.na(d1_merged$ENTREZID), , drop = FALSE]
+      
+      geneList <- gene_vector$log2FoldChange
+      names(geneList) <- gene_vector$ENTREZID
+      geneList <- geneList[!duplicated(names(geneList))]
+      geneList <- sort(geneList, decreasing = TRUE)
+      
+      max_genes <- if (!is.null(input$max_genes)) input$max_genes else 1000
+      if (length(geneList) > max_genes) geneList <- head(geneList, max_genes)
+      
+      if (length(geneList) < 10) {
+        shiny::showNotification("Too few mapped genes for pathway analysis.", type = "error")
+        return()
+      }
+      geneList_rv(geneList)
+      selected_genes <- names(geneList)
+      
+      # ---- Enrichment per DB ----
+      pathway_result <- NULL
+      if (identical(input$pathway_db, "GO")) {
+        pathway_result <- tryCatch({
+          clusterProfiler::enrichGO(
+            gene = selected_genes, OrgDb = orgdb, keyType = "ENTREZID",
+            ont = "BP", pAdjustMethod = "BH",
+            pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval,
+            readable = TRUE
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("GO enrichment failed:", e$message), type = "error"); NULL
+        })
+        
+      } else if (identical(input$pathway_db, "KEGG")) {
+        kegg_code <- .get_kegg_code(species)
+        if (is.null(kegg_code)) {
+          shiny::showNotification("KEGG not supported for this species.", type = "error"); return()
+        }
+        kegg_raw <- tryCatch({
+          clusterProfiler::enrichKEGG(
+            gene = selected_genes, organism = kegg_code,
+            pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("KEGG enrichment failed:", e$message), type = "error"); NULL
+        })
+        if (!is.null(kegg_raw) && nrow(as.data.frame(kegg_raw)) > 0) {
+          pathway_result <- tryCatch({
+            clusterProfiler::setReadable(kegg_raw, OrgDb = orgdb, keyType = "ENTREZID")
+          }, error = function(e) {
+            shiny::showNotification(paste("setReadable failed:", e$message), type = "error"); kegg_raw
+          })
+        }
+        
+      } else if (identical(input$pathway_db, "Reactome")) {
+        reactome_code <- .get_reactome_code(species)
+        if (is.null(reactome_code)) {
+          shiny::showNotification("Reactome enrichment supported only for human/mouse/rat.", type = "error"); return()
+        }
+        pathway_result <- tryCatch({
+          ReactomePA::enrichPathway(
+            gene = selected_genes, organism = reactome_code,
+            pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval,
+            readable = TRUE
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Reactome enrichment failed:", e$message), type = "error"); NULL
+        })
+        
+      } else {
+        shiny::showNotification("Unknown pathway database selected.", type = "error"); return()
+      }
+      
+      # Term-similarity (for emapplot)
+      if (!is.null(pathway_result) && nrow(as.data.frame(pathway_result)) > 0) {
+        # make gene symbols readable if not yet
+        if (!"geneSymbol" %in% colnames(as.data.frame(pathway_result))) {
+          pathway_result <- tryCatch({
+            clusterProfiler::setReadable(pathway_result, OrgDb = orgdb, keyType = "ENTREZID")
+          }, error = function(e) pathway_result)
+        }
+        # pairwise termsim
+        pathway_result <- tryCatch({
+          enrichplot::pairwise_termsim(pathway_result)
+        }, error = function(e) pathway_result)
+      } else {
+        shiny::showNotification("No enriched pathways found.", type = "warning")
+      }
+      
+      pathway_result_rv(pathway_result)
+    })
     
-    if (is_symbol(d1$gene)) {
-      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
-    } else {
-      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)})
-    }
+    # ---- Plots & Downloads ---------------------------------------------------
+    tag <- .contrast_tag_from(de_sel)
+    output$dotPlot <- shiny::renderPlot({
+      shiny::req(pathway_result_rv())
+      pr <- pathway_result_rv()
+      if (is.null(pr) || nrow(as.data.frame(pr)) == 0) {
+        shiny::showNotification("No enrichment terms available for dotplot.", type = "warning"); return(NULL)
+      }
+      enrichplot::dotplot(pr) + ggplot2::theme(axis.text.y = ggplot2::element_text(size = 6, face = "bold"))
+    })
     
-    d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)
-    d1_merged <- d1_merged[!duplicated(d1_merged$ENTREZID), ]
-    d1_merged_rv(d1_merged)
-    
-    gene_vector <- switch(direction,
-                          "Up" = d1_merged[d1_merged$log2FoldChange >= input$lfc_threshold & d1_merged$padj <= input$padj_threshold, ],
-                          "Down" = d1_merged[d1_merged$log2FoldChange <= -input$lfc_threshold & d1_merged$padj <= input$padj_threshold, ],
-                          d1_merged[abs(d1_merged$log2FoldChange) >= input$lfc_threshold & d1_merged$padj <= input$padj_threshold, ]
+    output$download_dot_plot <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction,  "_", tag, "_dot_plot.pdf"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv())
+        pr <- pathway_result_rv()
+        grDevices::pdf(file)
+        print(enrichplot::dotplot(pr) + ggplot2::theme(axis.text.y = ggplot2::element_text(size = 6, face = "bold")))
+        grDevices::dev.off()
+      }
     )
     
-    gene_vector <- gene_vector[!is.na(gene_vector$log2FoldChange) & !is.na(gene_vector$ENTREZID), ]
-    geneList <- gene_vector$log2FoldChange
-    names(geneList) <- gene_vector$ENTREZID
-    geneList <- geneList[!duplicated(names(geneList))]
-    geneList <- sort(geneList, decreasing = TRUE)
-    max_genes <- if (!is.null(input$max_genes)) input$max_genes else 1000
-    if (length(geneList) > max_genes) geneList <- head(geneList, max_genes)
-    selected_genes <- names(geneList)
-    geneList_rv(geneList)
-
-    if (length(selected_genes) < 10) {
-      showNotification("Too few mapped genes for pathway analysis.", type = "error")
-      return()
-    }
-    print("Starting Pathway Analysis")
-    if (input$pathway_db == "GO") {
-      pathway_result <- tryCatch({
-        clusterProfiler::enrichGO(
-          gene = selected_genes, OrgDb = orgdb, keyType = "ENTREZID",
-          ont = "BP", pAdjustMethod = "BH", pvalueCutoff = input$padj_threshold,
-          qvalueCutoff = input$pathway.qval, readable = TRUE
-        )
-      }, error = function(e) {
-        showNotification(paste("GO enrichment failed:", e$message), type = "error")
-        NULL
-      })
-    } else if (input$pathway_db == "KEGG") {
-      kegg_code <- tryCatch(get_kegg_code(species), error = function(e) NULL)
-      if (is.null(kegg_code)) {
-        showNotification("KEGG not supported for this species.", type = "error")
-        return()
+    output$emapPlot <- shiny::renderPlot({
+      shiny::req(pathway_result_rv())
+      pr <- pathway_result_rv()
+      df <- as.data.frame(pr)
+      if (is.null(df) || nrow(df) < 2 || !"ID" %in% colnames(df) || !"geneID" %in% colnames(df)) {
+        shiny::showNotification("Insufficient enrichment terms or missing columns for emapplot.", type = "warning"); return(NULL)
       }
-      x <- tryCatch({
-        clusterProfiler::enrichKEGG(
-          gene = selected_genes,
-          organism = kegg_code,
-          pvalueCutoff = input$padj_threshold,
-          qvalueCutoff = input$pathway.qval
-        )
-      }, error = function(e) {
-        showNotification(paste("KEGG enrichment failed:", e$message), type = "error")
-        NULL
-      })
-      # Now separately set pathway_result if enrichment succeeded
-      if (!is.null(x)) {
-        pathway_result <- tryCatch({
-          setReadable(x, OrgDb = orgdb, keyType = "ENTREZID")
-        }, error = function(e) {
-          showNotification(paste("setReadable failed:", e$message), type = "error")
-          NULL
-        })
-      } else {
-        pathway_result <- NULL
+      if (is.null(pr@termsim) || all(is.na(pr@termsim)) || all(pr@termsim == 0)) {
+        shiny::showNotification("No valid term similarity matrix for emapplot.", type = "warning"); return(NULL)
       }
-    } else if (input$pathway_db == "Reactome") {
-      # ReactomePA supports only human, mouse, and rat
-      supported_species <- c("Homo sapiens", "Mus musculus", "Rattus norvegicus")
-      if (!(species %in% supported_species)) {
-        showNotification("Reactome enrichment is only supported for human, mouse, and rat.", type = "error")
-        return()
-      }
-      
-      reactome_code <- tryCatch(get_reactome_code(species), error = function(e) NULL)
-      if (is.null(reactome_code)) {
-        showNotification("Reactome is not supported for this species.", type = "error")
-        return()
-      }
-      
-      pathway_result <- tryCatch({
-        ReactomePA::enrichPathway(
-          gene = selected_genes,
-          organism = reactome_code,
-          pvalueCutoff = input$padj_threshold,
-          qvalueCutoff = input$pathway.qval,
-          readable = TRUE
-        )
-      }, error = function(e) {
-        showNotification(paste("Reactome enrichment failed:", e$message), type = "error")
-        return(NULL)
-      })
-    } else if (input$pathway_db == "DO") {
-      if (species != "Homo sapiens") {
-        showNotification("DO enrichment only supports human (Homo sapiens). Please select another database.", type = "error")
-        return()
-      }
-      pathway_result <- tryCatch({
-        DOSE::enrichDO(
-          gene = selected_genes, ont = "DO",
-          pvalueCutoff = input$padj_threshold, qvalueCutoff = input$pathway.qval,
-          readable = TRUE
-        )
-      }, error = function(e) {
-        showNotification(paste("DO enrichment failed:", e$message), type = "error")
-        NULL
-      })
-    } else {
-      showNotification("Unknown pathway database selected.", type = "error")
-      return()
-    }
-    if (!is.null(pathway_result) && nrow(pathway_result@result) > 0) {
-      pathway_result <- setReadable(pathway_result, OrgDb = orgdb, keyType = "ENTREZID")
-    } else {
-      showNotification("No enriched pathways found.", type = "warning")
-    }
-    result_df <- as.data.frame(pathway_result@result)
-    if (is.null(result_df) ||
-        !all(c("ID", "geneID") %in% colnames(result_df)) ||
-        nrow(result_df) < 2 ||
-        anyNA(result_df$ID) ||
-        anyNA(result_df$geneID)) {
-      showNotification("Too few enriched terms to calculate term similarity for plots.", type = "warning")
-      pathway_result_rv(pathway_result)  # still store it for dotplot or table
-      return()
-    } else {
-      tryCatch({
-        pathway_result <- pairwise_termsim(pathway_result)
-        pathway_result_rv(pathway_result)
-      }, error = function(e) {
-        showNotification(paste("Error computing term similarity:", e$message), type = "error")
-        pathway_result_rv(pathway_result)  # store the result even if pairwise_termsim fails
-      })
-    }
-      # KEGG Term-Gene Heatmap
-  # output$keggHeatmapPlot <- renderPlot({
-  #    req(kegg_pathway_results(), geneList_rv())
-  #    selected_genes <- names(geneList_rv())
-  #    d1_merged <- d1_merged_rv()
-  #    gene_syms <- d1_merged$gene[match(selected_genes, d1_merged$ENTREZID)]
-  #    padjs <- d1_merged$padj[match(selected_genes, d1_merged$ENTREZID)]
-  #    valid_idx <- !is.na(gene_syms) & !is.na(padjs) & padjs >= 0 & padjs <= 1
-  # 
-  #    pathfindR_input <- data.frame(
-  #      Gene.symbol = gene_syms[valid_idx],
-  #      logFC = geneList_rv()[selected_genes][valid_idx],
-  #      adj.P.Val = padjs[valid_idx]
-  #    )
-  # 
-  #    pathfindR::term_gene_heatmap(
-  #      result_df = kegg_pathway_results(),
-  #      genes_df = pathfindR_input
-  #    )
-  # })
-
-  # # KEGG Pathway Image Rendering
-  # output$keggPathwayImage <- renderImage({
-  #   req(kegg_pathway_results(), geneList_rv(),d1_merged_rv())
-  #   
-  #   # Get the selected genes from the reactive gene list
-  #   selected_genes <- names(geneList_rv())
-  #   d1_merged <- d1_merged_rv()
-  #   gene_syms <- d1_merged$gene[match(selected_genes, d1_merged$ENTREZID)]
-  #   padjs <- d1_merged$padj[match(selected_genes, d1_merged$ENTREZID)]
-  #   
-  #   # Check if any gene symbols are actually Ensembl IDs and need conversion
-  #   ensembl_ids <- gene_syms[grepl("^ENS", gene_syms)]  # Check for Ensembl IDs
-  #   
-  #   if (length(ensembl_ids) > 0) {
-  #     # Convert Ensembl IDs to gene symbols using the provided utility function
-  #     gene_syms_converted <- convert_ensembl_to_symbol(ensembl_ids, species = "Homo sapiens")
-  #     # Update the gene symbols with converted values
-  #     gene_syms[gene_syms %in% ensembl_ids] <- gene_syms_converted
-  #   }
-  #   
-  #   # Filter the valid genes based on padj values (ensure both gene symbol and padj are valid)
-  #   valid_idx <- !is.na(gene_syms) & !is.na(padjs) & padjs >= 0 & padjs <= 1
-  #   
-  #   # Prepare the data frame for pathfindR input
-  #   pathfindR_input <- data.frame(
-  #     Gene.symbol = gene_syms[valid_idx],
-  #     logFC = geneList_rv()[selected_genes][valid_idx],
-  #     adj.P.Val = padjs[valid_idx]
-  #   )
-  #   input_processed<-pathfindR::input_processing(
-  #     pathfindR_input,
-  #     p_val_threshold = 0.05,
-  #     pin_name_path = "Biogrid",
-  #     convert2alias = TRUE
-  #   )
-  #   # Visualize KEGG pathway terms using pathfindR's visualize_terms function
-  #   numterm=min(nrow(kegg_pathway_results()), 10)
-  #   pathway_visualization <- pathfindR::visualize_terms(kegg_pathway_results()[1:numterm,], input_processed)
-  #   
-  #   # Save the pathway visualization as a PNG image to a folder
-  #   image_output_dir <- file.path(getwd(), "kegg_pathview_outputs", "term_visualizations")
-  #   if (!dir.exists(image_output_dir)) dir.create(image_output_dir, recursive = TRUE)
-  #   
-  #   # Save the plot to the output directory (adjust filename if necessary)
-  #   output_image_path <- file.path(image_output_dir, "kegg_pathway_visualization.png")
-  #   ggsave(output_image_path, plot = pathway_visualization, width = 10, height = 8)
-  #   
-  #   # Retrieve the image file and render it in the Shiny app
-  #   image_path <- list.files(
-  #     path = image_output_dir,
-  #     pattern = "_pathfindR\\.png$",
-  #     full.names = TRUE
-  #   )
-  #   
-  #   req(length(image_path) > 0 && file.exists(image_path[1]))
-  #   
-  #   # Return the image output for rendering in Shiny
-  #   list(
-  #     src = normalizePath(image_path[1]),
-  #     contentType = "image/png",
-  #     width = "100%",
-  #     alt = "KEGG Pathway Visualization",
-  #     deleteFile = FALSE
-  #   )
-  # }, deleteFile = FALSE)
-  # 
-
-  })
-  output$dotPlot <- renderPlot({
-    req(pathway_result_rv())
-    #req(pathway_result)
-    pathway_result<-pathway_result_rv()
-    if (is.null(pathway_result) || nrow(as.data.frame(pathway_result)) == 0) {
-      showNotification("No enrichment terms available for dotplot.", type = "warning")
-      return(NULL)}
-    enrichplot::dotplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold"))
-  })
-  
-  output$download_dot_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_dot_plot.pdf", sep="")  },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      pdf(file)
-      print(enrichplot::dotplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
-      dev.off()
-    }
-  )
-  
-  output$pathheatmapPlot <- renderPlot({
-    req(pathway_result_rv(), geneList_rv())
-    pathway_result<-pathway_result_rv()
-    geneList<-geneList_rv()
-    enrichplot::heatplot(pathway_result, foldChange=geneList, showCategory = 5) # + theme(axis.text.y = element_text(size = 6, face = "bold"))
-  })
-  
-  output$download_pathheatmap_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_heatmap_plot.pdf", sep="") },
-    content = function(file) {
-      req(pathway_result_rv(), geneList_rv())
-      geneList<-geneList_rv()
-      pathway_result<-pathway_result_rv()
-      pdf(file)
-      print(enrichplot::heatplot(pathway_result, foldChange=geneList , showCategory = 5)) #+ theme(axis.text.y = element_text(size = 6, face = "bold")))
-      dev.off()
-    }
-  )
-  
-  output$treePlot <- renderPlot({
-    req(pathway_result_rv())
-    pathway_result<-pathway_result_rv()
-    if (is.null(pathway_result) || nrow(as.data.frame(pathway_result)) == 0) {
-      showNotification("No enrichment terms available for treeplot.", type = "warning")
-      return(NULL)
-    }
-    enrichplot::treeplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold"))
-  })
-  
-  output$download_tree_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_tree_plot.pdf", sep="") },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      if (is.null(pathway_result) || nrow(as.data.frame(pathway_result)) == 0) {
-        showNotification("No enrichment terms available for treeplot.", type = "warning")
-        return(NULL)
-      }
-      pdf(file)
-      print(enrichplot::treeplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
-      dev.off()
-    }
-  )
-  
-  output$upsetPlot <- renderPlot({
-    req(pathway_result_rv())
-    pathway_result<-pathway_result_rv()
-    if (is.null(pathway_result) || nrow(as.data.frame(pathway_result)) == 0) {
-      showNotification("No enrichment terms available for upsetplot.", type = "warning")
-      return(NULL)}
-    enrichplot::upsetplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold"))
-  })
-  
-  output$download_upset_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_upset_plot.pdf", sep="") },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      pdf(file)
-      print(enrichplot::upsetplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
-      dev.off()
-    }
-  )
-  
-  output$emapPlot <- renderPlot({
-    req(pathway_result_rv())
-    pathway_result<-pathway_result_rv()
-    
-    df <- as.data.frame(pathway_result)
-    if (is.null(df) || nrow(df) < 2 || !"ID" %in% colnames(df) || !"geneID" %in% colnames(df)) {
-      showNotification("Insufficient enrichment terms or missing columns for emapplot.", type = "warning")
-      return(NULL)
-    }
-    
-    if (is.null(pathway_result@termsim) || all(is.na(pathway_result@termsim)) || all(pathway_result@termsim == 0)) {
-      showNotification("No valid term similarity matrix for emapplot.", type = "warning")
-      return(NULL)
-    }
-    
-    tryCatch({
-      enrichplot::emapplot(pathway_result, showCategory = 10)
-    }, error = function(e) {
-      showNotification(paste("emapplot failed:", e$message), type = "error")
-      NULL
+      enrichplot::emapplot(pr, showCategory = 10)
     })
-  })
-  
-  
-  
-  output$download_emap_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_emap_plot.pdf") },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      df <- as.data.frame(pathway_result)
-      if (is.null(df) || nrow(df) < 2 || is.null(pathway_result@termsim) || all(pathway_result@termsim == 0)) {
-        showNotification("No valid term similarity for export.", type = "warning")
-        return(NULL)
+    
+    output$download_emap_plot <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", tag,  "_emap_plot.pdf"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv())
+        pr <- pathway_result_rv()
+        df <- as.data.frame(pr)
+        if (is.null(df) || nrow(df) < 2 || is.null(pr@termsim) || all(pr@termsim == 0)) {
+          shiny::showNotification("No valid term similarity for export.", type = "warning"); return()
+        }
+        grDevices::pdf(file); print(enrichplot::emapplot(pr, showCategory = 10)); grDevices::dev.off()
       }
-      pdf(file)
-      print(enrichplot::emapplot(pathway_result, showCategory = 10))
-      dev.off()
-    }
-  )
-  
-  
-  output$cnetPlot <- renderPlot({
-    req(pathway_result_rv())
-    pathway_result<-pathway_result_rv()
-    #pathway_result_filtered <- subset(pathway_result, padj < 0.05)
-    if (is.null(pathway_result) || nrow(as.data.frame(pathway_result)) == 0) {
-      showNotification("No enrichment terms available for cnetplot.", type = "warning")
-      return(NULL)}
-    enrichplot::cnetplot(pathway_result,showCategory = 10)
+    )
+    
+    output$cnetPlot <- shiny::renderPlot({
+      shiny::req(pathway_result_rv())
+      pr <- pathway_result_rv()
+      if (is.null(pr) || nrow(as.data.frame(pr)) == 0) {
+        shiny::showNotification("No enrichment terms available for cnetplot.", type = "warning"); return(NULL)
+      }
+      enrichplot::cnetplot(pr, showCategory = 10)
+    })
+    
+    output$download_cnet_plot <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", tag,  "_cnet_plot.pdf"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv())
+        pr <- pathway_result_rv()
+        grDevices::pdf(file); print(enrichplot::cnetplot(pr, showCategory = 10)); grDevices::dev.off()
+      }
+    )
+    
+    output$circularPlot <- shiny::renderPlot({
+      shiny::req(pathway_result_rv(), geneList_rv())
+      pr <- pathway_result_rv()
+      df <- as.data.frame(pr)
+      if (is.null(df) || nrow(df) == 0) {
+        shiny::showNotification("No enriched terms to show circular plot.", type = "warning"); return(NULL)
+      }
+      enrichplot::cnetplot(pr,
+                           layout = input$circular_layout, foldChange = geneList_rv(),
+                           showCategory = 5, circular = TRUE, colorEdge = TRUE
+      )
+    })
+    
+    output$download_circular_plot <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", input$circular_layout, "_", tag,  "_circular_plot.pdf"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv(), geneList_rv())
+        pr <- pathway_result_rv()
+        grDevices::pdf(file)
+        print(enrichplot::cnetplot(pr,
+                                   layout = input$circular_layout, foldChange = geneList_rv(),
+                                   showCategory = 5, circular = TRUE, colorEdge = TRUE
+        ))
+        grDevices::dev.off()
+      }
+    )
+    
+    output$pathwayTable <- DT::renderDT({
+      shiny::req(pathway_result_rv())
+      DT::datatable(as.data.frame(pathway_result_rv()), options = list(scrollX = TRUE, pageLength = 25))
+    })
+    
+    output$download_pathway_table <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", tag,  "_results.csv"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv())
+        utils::write.csv(as.data.frame(pathway_result_rv()), file, row.names = FALSE)
+      }
+    )
   })
-  
-  output$download_cnet_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_cnet_plot.pdf", sep="") },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      pdf(file)
-      print(enrichplot::cnetplot(pathway_result))
-      dev.off()
-    }
-  )
-  
-  output$circularPlot <- renderPlot({
-    req(pathway_result_rv(),geneList_rv())
-    pathway_result<-pathway_result_rv()
-    validate(need(nrow(pathway_result@result) > 0, "No enriched terms to show circular plot."))
-    enrichplot::cnetplot(pathway_result, layout = input$circular_layout, foldChange=geneList_rv(),
-                         showCategory = 5,circular = TRUE,colorEdge = TRUE)
-  })
-  
-  output$download_circular_plot <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_",input$circular_layout,"_circular_plot.pdf", sep="") },
-    content = function(file) {
-      req(pathway_result_rv())
-      req(geneList_rv())
-      pathway_result<-pathway_result_rv()
-      pdf(file)
-      print(enrichplot::cnetplot(pathway_result, layout = input$circular_layout,  foldChange=geneList_rv(),
-                                 showCategory = 5,circular = TRUE, colorEdge = TRUE))
-      dev.off()
-    }
-  )
-  
-  output$pathwayTable <- renderDT({
-    req(pathway_result_rv())
-    pathway_result<-pathway_result_rv()
-    as.data.frame(pathway_result)
-  })
-  
-  output$download_pathway_table <- downloadHandler(
-    filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_results.csv", sep="")  },
-    content = function(file) {
-      req(pathway_result_rv())
-      pathway_result<-pathway_result_rv()
-      write.csv(as.data.frame(pathway_result), file, row.names = FALSE)
-    }
-  )
-
 }
-# === Register in server ===
-# mod_pathway_analysis(input, output, session, filtered_data, res_reactive, kegg_pathway_results,d1_merged_rv, pathway_input_rv)
 
+# ---- helpers (internal) ------------------------------------------------------
+
+.is_symbol <- function(ids) {
+  # Use app's is_symbol() if present; else heuristic (not ENSEMBL-like)
+  if (exists("is_symbol", mode = "function")) return(get("is_symbol")(ids))
+  !grepl("^ENS[A-Z]*\\d+", ids)
+}
+
+.get_orgdb <- function(species) {
+  # Try app helper first
+  if (exists("get_orgdb", mode = "function")) return(get("get_orgdb")(species))
+  # Fallback: support Hs/Mm/Rn (load if installed)
+  sp <- as.character(species)
+  if (sp %in% c("Homo sapiens", "human")) {
+    if (requireNamespace("org.Hs.eg.db", quietly = TRUE)) return(org.Hs.eg.db::org.Hs.eg.db)
+  } else if (sp %in% c("Mus musculus", "mouse")) {
+    if (requireNamespace("org.Mm.eg.db", quietly = TRUE)) return(org.Mm.eg.db::org.Mm.eg.db)
+  } else if (sp %in% c("Rattus norvegicus", "rat")) {
+    if (requireNamespace("org.Rn.eg.db", quietly = TRUE)) return(org.Rn.eg.db::org.Rn.eg.db)
+  }
+  NULL
+}
+
+.get_kegg_code <- function(species) {
+  if (exists("get_kegg_code", mode = "function")) return(get("get_kegg_code")(species))
+  sp <- as.character(species)
+  if (sp %in% c("Homo sapiens", "human")) return("hsa")
+  if (sp %in% c("Mus musculus", "mouse")) return("mmu")
+  if (sp %in% c("Rattus norvegicus", "rat")) return("rno")
+  if (sp %in% c("Danio rerio")) return("dre")
+  if (sp %in% c("Bos taurus")) return("bta")
+  NULL
+}
+
+.get_reactome_code <- function(species) {
+  if (exists("get_reactome_code", mode = "function")) return(get("get_reactome_code")(species))
+  sp <- as.character(species)
+  if (sp %in% c("Homo sapiens", "human")) return("human")
+  if (sp %in% c("Mus musculus", "mouse")) return("mouse")
+  if (sp %in% c("Rattus norvegicus", "rat")) return("rat")
+  NULL
+}

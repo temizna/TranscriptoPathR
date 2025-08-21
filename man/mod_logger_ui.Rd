@@ -10,7 +10,7 @@ mod_logger_ui(id)
 \item{id}{Shiny module id}
 }
 \value{
-A Shiny UI element to display the log and a download button
+UI for the log and a download button
 }
 \description{
 Logger Module UI

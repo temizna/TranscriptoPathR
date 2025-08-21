@@ -1,170 +1,190 @@
-#' Non-overlapping Pathway Analysis Module
+# --- Module Server: Non-overlap Genes Pathway Analysis -----------------------
+#' Non-overlap Pathway Analysis Server
 #'
-#' This module handles the pathway enrichment analysis for non-overlapping genes. It filters out the genes that are already included in the initial pathway results and reruns the pathway analysis using clusterProfiler.
+#' Removes genes already present in current enrichment results and re-runs
+#' enrichment on the remaining (non-overlap) set.
 #'
-#' @param input Shiny input object containing the user interface input values.
-#' @param output Shiny output object to render the pathway analysis results and visualizations.
-#' @param session Shiny session object for managing the session and UI updates.
-#' @param filtered_data_rv Reactive object containing the filtered data, which includes normalized counts, samples, and species information.
-#' @param res_reactive Reactive object containing the DESeq2 results (log2 fold change, p-value, and adjusted p-value).
-#' @param geneList_rv Reactive object containing the initial list of genes, typically with log2 fold change values and corresponding Entrez IDs, used for the first pathway analysis.
-#' @param geneListU_rv Reactive object containing the unique list of genes, with log2 fold change values and corresponding Entrez IDs, used for the non-overlapping pathway analysis.
-#' @param pathway_result_rv Reactive object containing the initial pathway analysis results from clusterProfiler, including gene IDs and enrichment terms. 
-#' @importFrom shiny req renderPlot renderUI downloadHandler showNotification
-#' @importFrom clusterProfiler enrichGO enrichKEGG
-#' @importFrom enrichplot dotplot heatplot treeplot cnetplot upsetplot emapplot
-#' @importFrom org.Hs.eg.db org.Hs.eg.db
-#' @importFrom grDevices dev.off
+#' @param id module id
+#' @param filtered_data_rv reactiveValues with $species
+#' @param pathway_result_rv reactiveVal holding the *initial* enrichment result (enrichResult)
+#' @param geneList_rv reactiveVal named numeric vector (log2FC), names = ENTREZID
+#' @param geneListU_rv reactiveVal to store the updated non-overlap gene list (named by ENTREZID)
+#'
+#' @importFrom shiny moduleServer req observeEvent showNotification renderPlot downloadHandler
+#' @importFrom DT renderDT datatable
+#' @importFrom utils write.csv
+#' @importFrom grDevices pdf dev.off
+#' @importFrom clusterProfiler enrichGO enrichKEGG setReadable bitr
+#' @importFrom ReactomePA enrichPathway
+#' @importFrom enrichplot dotplot heatplot treeplot pairwise_termsim
 #' @export
-mod_pathway_analysis_non_overlap <- function(input, output, session, geneList_rv, filtered_data_rv, pathway_result_rv, res_reactive, geneListU_rv) {
-  
-  # Filter out the common genes between pathway results and original gene list
-  observeEvent(input$run_non_overlap_pathway, {
-    req(geneList_rv(), pathway_result_rv())  # Ensure we have initial results and gene list
+mod_nonoverlap_server <- function(
+    id,
+    filtered_data_rv,
+    pathway_result_rv,
+    geneList_rv,
+    geneListU_rv
+) {
+  shiny::moduleServer(id, function(input, output, session) {
     
-    # Get the initial results and gene list
-    pathway_results <- pathway_result_rv()
-    initial_gene_list <- geneList_rv()
-    
-    # Extract the genes that are common between pathway_results and initial gene list
-    pathway_genes <- unique(unlist(strsplit(pathway_results$geneID, "/")))
-    common_genes <- intersect(pathway_genes, names(initial_gene_list))
-    
-    # Update the gene list by removing common genes
-    new_gene_list <- initial_gene_list[!names(initial_gene_list) %in% common_genes]
-    geneListU_rv(new_gene_list)  # Store the updated gene list in a reactive value
-    
-    # Now rerun the pathway analysis with the updated gene list
-    species <- filtered_data_rv$species
-    orgdb <- get_orgdb(species)
-    
-    res <- res_reactive()
-    res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), ]
-    d1 <- res[, c("log2FoldChange", "padj")]
-    d1$gene <- rownames(res)
-    
-    if (is_symbol(d1$gene)) {
-      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = orgdb)})
-    } else {
-      d1_ids <- suppressMessages({bitr(d1$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)})
-    }
-    
-    d1_merged <- merge(d1, d1_ids, by.x = "gene", by.y = 1)
-    d1_merged <- d1_merged[!duplicated(d1_merged$ENTREZID), ]
-    
-    selected_genes <- names(new_gene_list)
-    
-    # Run the pathway analysis with the updated gene list
-    if (input$pathway_db == "GO") {
-      pathway_result <- clusterProfiler::enrichGO(
-        gene = selected_genes, 
-        OrgDb = orgdb, 
-        keyType = "ENTREZID", 
-        ont = "BP", 
-        pAdjustMethod = "BH", 
-        pvalueCutoff = input$padj_threshold,
-        qvalueCutoff = input$pathway.qval,
-        readable = TRUE
-      )
-    } else if (input$pathway_db == "KEGG") {
-      kegg_sp <- if( filtered_data_rv$species == "Homo sapiens") "hsa" else "mmu"
-      x <- clusterProfiler::enrichKEGG(
-        gene = selected_genes, 
-        organism = kegg_sp, 
-        pvalueCutoff = input$padj_threshold,
-        qvalueCutoff =  input$pathway.qval
-      )
-      pathway_result <- setReadable(x, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-    } else {
-      pathway_result <- tryCatch({
-        x <- enrichPathway(
-          gene = selected_genes, 
-          organism = get_reactome_code(filtered_data_rv$species), 
-          pvalueCutoff = input$padj_threshold,
-          qvalueCutoff = input$pathway.qval, 
-          readable = TRUE
-        )
-        setReadable(x, OrgDb = orgdb, keyType = "ENTREZID")
-      }, error = function(e) {
-        showNotification(paste("Reactome pathway analysis failed:", e$message), type = "error")
-        return(NULL)
+    # -- Run analysis
+    shiny::observeEvent(input$run_non_overlap_pathway, {
+      shiny::req(geneList_rv(), pathway_result_rv(), filtered_data_rv$species)
+      
+      # Pull current enrichment results as a data.frame
+      pr <- pathway_result_rv()
+      pr_df <- as.data.frame(pr)
+      if (!nrow(pr_df) || !"geneID" %in% colnames(pr_df)) {
+        shiny::showNotification("No prior pathway result with geneID column.", type = "error")
+        return()
+      }
+      
+      # Genes included in the current pathways (ENTREZ IDs as 'a/b/c')
+      pathway_genes <- unique(unlist(strsplit(pr_df$geneID, "/", fixed = TRUE)))
+      
+      # Original gene list (named by ENTREZID)
+      gl0 <- geneList_rv()
+      if (!length(gl0)) {
+        shiny::showNotification("Initial gene list is empty.", type = "error"); return()
+      }
+      
+      # Non-overlap: remove genes already in enriched pathways
+      gl_non <- gl0[setdiff(names(gl0), pathway_genes)]
+      if (!length(gl_non)) {
+        shiny::showNotification("No genes left after removing overlap.", type = "warning"); return()
+      }
+      geneListU_rv(gl_non)
+      
+      species <- filtered_data_rv$species
+      orgdb   <- get_orgdb(species)               # your existing helper
+      showN   <- max(3, min(input$showCategory_nonOL, 50))
+      padjC   <- input$padj_threshold_nonOL
+      qvalC   <- input$pathway_qval_nonOL
+      
+      selected_genes <- names(gl_non)
+      if (length(selected_genes) < 10) {
+        shiny::showNotification("Too few genes left for enrichment (<10).", type = "warning")
+        return()
+      }
+      
+      # -- Enrichment by chosen DB
+      pathway_result <- NULL
+      db <- input$pathway_db_nonOL
+      
+      if (identical(db, "GO")) {
+        pathway_result <- tryCatch({
+          clusterProfiler::enrichGO(
+            gene = selected_genes,
+            OrgDb = orgdb, keyType = "ENTREZID",
+            ont = "BP", pAdjustMethod = "BH",
+            pvalueCutoff = padjC, qvalueCutoff = qvalC,
+            readable = TRUE
+          )
+        }, error = function(e) { shiny::showNotification(e$message, type = "error"); NULL })
+      } else if (identical(db, "KEGG")) {
+        kegg_code <- get_kegg_code(species)
+        if (is.null(kegg_code)) {
+          shiny::showNotification("KEGG not supported for this species.", type = "error"); return()
+        }
+        x <- tryCatch({
+          clusterProfiler::enrichKEGG(
+            gene = selected_genes, organism = kegg_code,
+            pvalueCutoff = padjC, qvalueCutoff = qvalC
+          )
+        }, error = function(e) { shiny::showNotification(e$message, type = "error"); NULL })
+        if (!is.null(x)) {
+          pathway_result <- tryCatch({
+            clusterProfiler::setReadable(x, OrgDb = orgdb, keyType = "ENTREZID")
+          }, error = function(e) { shiny::showNotification(e$message, type = "error"); NULL })
+        }
+      } else if (identical(db, "Reactome")) {
+        rc <- get_reactome_code(species)
+        if (is.null(rc)) {
+          shiny::showNotification("Reactome not supported for this species.", type = "error"); return()
+        }
+        pathway_result <- tryCatch({
+          ReactomePA::enrichPathway(
+            gene = selected_genes, organism = rc,
+            pvalueCutoff = padjC, qvalueCutoff = qvalC, readable = TRUE
+          )
+        }, error = function(e) { shiny::showNotification(e$message, type = "error"); NULL })
+      }
+      
+      if (is.null(pathway_result) || !nrow(as.data.frame(pathway_result))) {
+        shiny::showNotification("No enriched pathways found for non-overlap set.", type = "warning")
+        # Clear outputs
+        output$dotPlot_nonOL        <- shiny::renderPlot({})
+        output$heatmapPlot_nonOL    <- shiny::renderPlot({})
+        output$treePlot_nonOL       <- shiny::renderPlot({})
+        output$pathwayTable_nonOL   <- DT::renderDT({})
+        return()
+      }
+      
+      # Try term similarity (guarded)
+      pr_termsim <- try(enrichplot::pairwise_termsim(pathway_result), silent = TRUE)
+      if (!inherits(pr_termsim, "try-error")) pathway_result <- pr_termsim
+      
+      # ---- Plots/Tables
+      output$dotPlot_nonOL <- shiny::renderPlot({
+        enrichplot::dotplot(pathway_result, showCategory = showN)
       })
-    }
-    
-    if (!is.null(pathway_result) && nrow(pathway_result@result) > 0) {
-      pathway_result <- setReadable(pathway_result, OrgDb = orgdb, keyType = "ENTREZID")
-    } else {
-      showNotification("No enriched pathways found.", type = "warning")
-    }
-    
-    result_df <- as.data.frame(pathway_result@result)
-    #print("Columns in result_df:")
-    #print(colnames(result_df))
-    #print("Preview of result_df:")
-    #print(head(result_df))
-    
-    if (is.null(result_df) ||
-        !all(c("ID", "geneID") %in% colnames(result_df)) ||
-        nrow(result_df) < 2 ||
-        anyNA(result_df$ID) ||
-        anyNA(result_df$geneID)) {
-      showNotification("Too few enriched terms to calculate term similarity for plots.", type = "warning")
-      return()
-    } else {
-      pathway_result <- pairwise_termsim(pathway_result) 
-    }
-    
-    # Proceed with rendering visualizations
-    output$dotPlot_nonOL <- renderPlot({
-      enrichplot::dotplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold"))
+      
+      output$heatmapPlot_nonOL <- shiny::renderPlot({
+        enrichplot::heatplot(pathway_result, foldChange = gl_non, showCategory = min(5, showN))
+      })
+      
+      output$treePlot_nonOL <- shiny::renderPlot({
+        # treeplot can be picky; protect with tryCatch
+        tryCatch({
+          enrichplot::treeplot(pathway_result, showCategory = showN)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste("Treeplot unavailable:", e$message),
+            type = "warning"
+          )
+          NULL
+        })
+      })
+      
+      output$pathwayTable_nonOL <- DT::renderDT({
+        DT::datatable(as.data.frame(pathway_result), options = list(scrollX = TRUE))
+      })
+      
+      # ---- Downloads
+      output$download_nonOL_dot_plot <- shiny::downloadHandler(
+        filename = function() paste0("Pathway_nonoverlap_", db, "_dotplot.pdf"),
+        content  = function(file) {
+          grDevices::pdf(file, width = 8, height = 6)
+          print(enrichplot::dotplot(pathway_result, showCategory = showN))
+          grDevices::dev.off()
+        }
+      )
+      
+      output$download_nonOL_heatmap_plot <- shiny::downloadHandler(
+        filename = function() paste0("Pathway_nonoverlap_", db, "_heatmap.pdf"),
+        content  = function(file) {
+          grDevices::pdf(file, width = 8, height = 6)
+          print(enrichplot::heatplot(pathway_result, foldChange = gl_non, showCategory = min(5, showN)))
+          grDevices::dev.off()
+        }
+      )
+      
+      output$download_nonOL_tree_plot <- shiny::downloadHandler(
+        filename = function() paste0("Pathway_nonoverlap_", db, "_treeplot.pdf"),
+        content  = function(file) {
+          grDevices::pdf(file, width = 8, height = 6)
+          p <- tryCatch({
+            enrichplot::treeplot(pathway_result, showCategory = showN)
+          }, error = function(e) NULL)
+          if (!is.null(p)) print(p)
+          grDevices::dev.off()
+        }
+      )
+      
+      output$download_nonOL_pathway_table <- shiny::downloadHandler(
+        filename = function() paste0("Pathway_nonoverlap_", db, "_results.csv"),
+        content  = function(file) utils::write.csv(as.data.frame(pathway_result), file, row.names = FALSE)
+      )
     })
-    
-    output$download_nonOL_dot_plot <- downloadHandler(
-      filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_nonOL_dot_plot.pdf", sep="")  },
-      content = function(file) {
-        pdf(file)
-        print(enrichplot::dotplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
-        dev.off()
-      }
-    )
-    
-    output$heatmapPlot_nonOL <- renderPlot({
-      enrichplot::heatplot(pathway_result, foldChange=geneListU_rv(), showCategory = 5)
-    })
-    
-    output$download_nonOL_heatmap_plot <- downloadHandler(
-      filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_nonOL_heatmap_plot.pdf", sep="") },
-      content = function(file) {
-        pdf(file)
-        print(enrichplot::heatplot(pathway_result, foldChange=geneListU_rv() , showCategory = 5))
-        dev.off()
-      }
-    )
-    
-    output$treePlot_nonOL <- renderPlot({
-      enrichplot::treeplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold"))
-    })
-    
-    output$download_nonOL_tree_plot <- downloadHandler(
-      filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_nonOL_tree_plot.pdf", sep="") },
-      content = function(file) {
-        pdf(file)
-        print(enrichplot::treeplot(pathway_result) + theme(axis.text.y = element_text(size = 6, face = "bold")))
-        dev.off()
-      }
-    )
-    
-    output$pathwayTable_nonOL <- renderDT({
-      req(pathway_result)
-      as.data.frame(pathway_result)
-    })
-    
-    output$download_pathway_nonOL_table <- downloadHandler(
-      filename = function() { paste0("Pathway_",input$pathway_db,"_",input$pathway_direction,"_nonOL_results.csv", sep="")  },
-      content = function(file) {
-        write.csv(as.data.frame(pathway_result), file, row.names = FALSE)
-      }
-    )
   })
 }
-

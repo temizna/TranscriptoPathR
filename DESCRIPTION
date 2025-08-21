@@ -1,12 +1,12 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.9.1
+Version: 1.0.1
 Authors@R: person("Alpay", "Temiz", email = "temizna@umn.edu", role = c("aut", "cre"))
 Description: 
     TranscriptoPathR provides an interactive Shiny interface for complete RNA-Seq analysis,
     including data upload, normalization, quality control, differential expression,
     gene expression visualization, pathway analysis, simple clustering with PCA, Cancer Gene Census overlaps,
-    transcription factor enrichment and GSEA using CRAN and Bioconductor tools.
+    transcription factor enrichment and GSEA, GSVA and ssGSVA using CRAN and Bioconductor tools.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -41,14 +41,18 @@ Imports:
     circlize,
     AnnotationDbi,
     gson,
+    scales,
+    GSEABase,
     vroom,
     org.Hs.eg.db,
     org.Mm.eg.db,
     org.Rn.eg.db, 
-    org.Cf.eg.db, 
-    org.Sc.sgd.db,
     DOSE,
     colorspace,
+    limma,
+    SummarizedExperiment,
+    GSVA,
+    BiocParallel
 Suggests:
     testthat,
     knitr,

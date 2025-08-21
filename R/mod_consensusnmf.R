@@ -16,6 +16,7 @@
 #' @importFrom ReactomePA enrichPathway
 #' @importFrom enrichplot dotplot
 #' @importFrom DT renderDT datatable
+#' @importFrom DOSE enrichDO
 #' @export
 mod_pca_cluster_server <- function(input, output, session, filtered_data_rv) {
   gene_pc_map <- reactiveVal(NULL)

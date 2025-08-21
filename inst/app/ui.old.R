@@ -1,5 +1,5 @@
 ui <- fluidPage(
-  theme = shinythemes::shinytheme("cerulean"),
+  theme = shinythemes::shinytheme("lux"),
   titlePanel("TranscriptoPathR: An R Shiny App to Anaylze RNASeq data"),
   tabsetPanel(
     tabPanel("Load Your Data",
@@ -118,7 +118,28 @@ ui <- fluidPage(
         )
       )
     ),
-    mod_de_tab_ui("de"),
+    tabPanel("Differential Expression",
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput("metadata_column", "Variable to test:", choices = NULL),
+                 selectInput("reference_condition", "Reference Condition:", choices = NULL),
+                 selectInput("test_condition", "Test Condition:", choices = NULL),
+                 sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
+                 sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
+                 actionButton("run_de", "Run Differential Expression"),
+                 numericInput("num_genes", "Number of Top Genes:", value = 100, min = 10, max = 500, step = 10),
+                 checkboxInput("cluster_columns", "Cluster Columns", value = TRUE),
+                 downloadButton("download_heatmap", "Save as PDF")
+               ),
+               mainPanel(
+                 plotOutput("heatmapPlot"),
+                 br(),
+                 DT::DTOutput("deTable"),
+                 br(),
+                 downloadButton("download_de_table", "Download DE Table")
+               )
+             )
+    ),
     tabPanel("Volcano Plot",
              sidebarLayout(
                sidebarPanel(
@@ -136,13 +157,171 @@ ui <- fluidPage(
                )
              )
     ),         
-    mod_cross_tab_ui("cross"),
-    tabPanel("GSEA",           mod_gsea_tab_ui("gsea")),
-    tabPanel("Pathway Analysis", mod_pathway_ui("pathway")),
-    tabPanel("Pathway Plots",    mod_pathway_plots_ui("pathplots")),
-    tabPanel("Non-overlap Genes Pathway Analysis", mod_nonoverlap_tab_ui("nonOL")),
+    tabPanel("Cross Plot",
+             sidebarLayout(
+               sidebarPanel(
+                 textInput("crossplot_gene_label", "Enter Gene(s) (space-separated):", value = ""),
+                 selectInput("metadata_column_x", "X-axis Variable to test:", choices = NULL),
+                 selectInput("reference_condition_x", "X-axis Reference Condition:", choices = NULL),
+                 selectInput("test_condition_x", "X-axis Test Condition:", choices = NULL),
+                 selectInput("metadata_column_y", "Y-axis Variable to test:", choices = NULL),
+                 selectInput("reference_condition_y", "Y-axis Reference Condition:", choices = NULL),
+                 selectInput("test_condition_y", "Y-axis Test Condition:", choices = NULL),
+                 numericInput("crossplot_gene_count", "Top N Genes to Plot:", value = 2000, min = 10, max = 5000, step = 10),
+                 numericInput("crossplot_topgenes", "Top N Genes to Label:", value = 10, min = 0, max = 100, step = 1),
+                 selectInput("cross_enrich_method", "Enrichment Method",
+                             choices = c("groupGO", "enrichGO", "enrichKEGG", "enrichPathway"),
+                             selected = "enrichKEGG"),
+                 actionButton("run_crossplot", "Run Cross Plot"),
+                 textInput("crossplot_filename", "Filename (with extension)", value = "crossplot.pdf"),
+                 textInput("crosspath_filename", "Filename (with extension)", value = "crosspath.pdf"),
+                 downloadButton("download_cross_plot", "Download Cross Plot"),
+                 downloadButton("download_cross_venn_plot", "Download Venn Diagram"),
+                 downloadButton("download_overlap_genes", "Download Overlapping Genes"),
+                 downloadButton("download_cross_category_heatmap", "Download Heatmap"),
+                 downloadButton("download_cross_pathway_plot", "Download Pathway Plot")
+               ),
+               mainPanel(
+                 plotOutput("crossPlot"),
+                 br(),
+                 plotOutput("crossVennPlot"),
+                 br(),
+                 plotOutput("crossCategoryHeatmap"),
+                 br(),
+                 plotOutput("crosspathplot")
+               )
+             )
+    ),
+    tabPanel("GSEA",
+             sidebarLayout(
+               sidebarPanel(
+                 checkboxInput("gsea_split_dotplot", "Split Dot Plot by Activation State", value = TRUE),
+                 selectInput("gsea_color_scale", "Dot Plot Color By:", choices = c("p.adjust", "pvalue","qvalue", "NES"), selected = "pvalue"),
+                 selectInput("gsea_db", "Select Database:", choices = c("GO", "KEGG", "Reactome", "Hallmark","Cancer Cell Atlas",
+                                                                        "Cancer Gene Neighbourhoods", "Cancer Modules","Txn Factor Targets")),
+                 numericInput("gsea_top_n", "Top N Pathways to Show in GSEA Table:", value = 10, min = 1, max = 50),
+                 sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 8, value = 1, step = 0.25, ticks = TRUE),
+                 sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
+                 sliderInput("gsea_pvalue", "GSEA Q-value threshold for enrichment", min = 0, max = 1, value = 0.20, step = 0.01),
+                 downloadButton("download_gsea_table", "Download GSEA Table"),
+                 downloadButton("download_gsea_dot_plot", "Download GSEA Dot Plot"),
+                 selectInput("gsea_selected_pathway", "Select Pathway for Enrichment Plot:", choices = NULL),
+                 downloadButton("download_gsea_enrichment_plot", "Download GSEA Enrichment Plot"),
+                 downloadButton("download_gsea_upset_plot", "Download Upset Plot"),
+                 actionButton("run_gsea", "Run GSEA")
+               ),
+               mainPanel(
+                 plotOutput("gseaDotPlot"),
+                 br(),
+                 br(),
+                 plotOutput("gseaEnrichmentPlot"),
+                 br(),
+                 plotOutput("GSEAupsetPlot"),
+                 br(),
+                 DT::DTOutput("gseaTable")
+               )
+             )
+    ),
+    tabPanel("Pathway Analysis", 
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput("pathway_db", "Select Pathway Database:", choices = c("GO", "KEGG", "Reactome")),
+                 selectInput("pathway_direction", "Direction:", choices = c("Up", "Down", "Both")),
+                 selectInput("circular_layout", "Circular Plot Layout:", choices = c("circle", "kk", "mds"), selected = "circle"),
+                 sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
+                 sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
+                 sliderInput("pathway.qval", "Pathway Q-value threshold for enrichment:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE), 
+                 numericInput("max_genes", "Max Genes For Pathway Analysis:", value = 1000, min = 100, max = 1500, step = 100),
+                 actionButton("run_pathway", "Run Pathway Analysis"),
+                 downloadButton("download_dot_plot", "Download Dot Plot"),
+                 downloadButton("download_emap_plot", "Download Emap Plot"),
+                 downloadButton("download_cnet_plot", "Download Cnet Plot"),
+                 downloadButton("download_pathway_table", "Download Pathway Table"),
+                 downloadButton("download_circular_plot", "Download Circular Plot")
+               ),
+               mainPanel(
+                 plotOutput("dotPlot"),
+                 br(),
+                 plotOutput("emapPlot"),
+                 br(),
+                 plotOutput("cnetPlot"),
+                 br(),
+                 plotOutput("circularPlot"), 
+                 br(),
+                 DT::DTOutput("pathwayTable")
+               )
+             )
+    ),
+    tabPanel("Pathway Plots",
+             # imageOutput("PathwayImage"),
+             sidebarLayout(
+               sidebarPanel(
+                 downloadButton("download_pathheatmap_plot", "Download Heatmap Plot"),
+                 downloadButton("download_tree_plot", "Download Tree Plot"),
+                 downloadButton("download_upset_plot", "Download Upset Plot")
+               ),
+               mainPanel(
+                 #br(),
+                 #downloadButton("download_kegg_png", "Download KEGG Pathway PNG"),
+                 plotOutput("pathheatmapPlot"),
+                 br(),
+                 plotOutput("treePlot"),
+                 br(),
+                 plotOutput("upsetPlot")
+               )
+             )
+    ),
+    tabPanel("Non-overlap Genes Pathway Analysis", 
+             sidebarLayout(
+               sidebarPanel(
+                 actionButton("run_non_overlap_pathway", "Run Non Overlap Pathway Analysis"),
+                 downloadButton("download_nonOL_dot_plot", "Download Dot Plot"),
+                 downloadButton("download_nonOL_heatmap_plot", "Download Heatmap Plot"),
+                 downloadButton("download_nonOL_tree_plot", "Download Tree Plot"),
+                 downloadButton("download_nonOL_pathway_table", "Download Pathway Table")
+               ),
+               mainPanel(
+                 plotOutput("dotPlot_nonOL"),
+                 br(),
+                 plotOutput("heatmapPlot_nonOL"),
+                 br(),
+                 plotOutput("treePlot_nonOL"),
+                 br(),
+                 DT::DTOutput("pathwayTable_nonOL")
+               )
+             )
+    ),
     tabPanel("GSVA / ssGSEA", mod_gsva_ui("gsva")),
-    tabPanel("Transcription Factor Enrichment", mod_tf_tab_ui("tf")),
+    tabPanel("Transcription Factor Enrichment",
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput("tf_data_source", "Select Transcription Factor Dataset:",
+                             choices = c(
+                               "TRANSFAC and JASPAR PWMs",
+                               "ENCODE and ChEA Consensus TFs from ChIP-X",
+                               "TRRUST_Transcription_Factors_2019",
+                               "TF_Perturbations_Followed_by_Expression",
+                               "hTFtarget",
+                               "TFLink"), selected = NULL),
+                 selectInput("enrichment_method", "Select Enrichment Method:", choices = c("Over_representation","GSEA")),
+                 selectInput("gene_direction", "Direction:", choices = c("Up", "Down", "Both")),
+                 sliderInput("lfc_threshold", "Log2 Fold Change Threshold:", min = 0, max = 4, value = 1, step = 0.25, ticks = TRUE),
+                 sliderInput("padj_threshold", "Adjusted P-Value Threshold:", min = 0, max = 0.5, value = 0.05, step = 0.01, ticks = TRUE),
+                 sliderInput("tf.qval", "TF Q-value threshold for enrichment:", min = 0, max = 0.5, value = 0.1, step = 0.01, ticks = TRUE),
+                 actionButton("run_tf_enrichment", "Run TF Enrichment"),
+                 downloadButton("download_tf_dotplot", "Download Dot Plot"),
+                 downloadButton("download_tf_ridgeplot", "Download Ridge Plot"),
+                 downloadButton("download_tf_results_table", "Download Table")
+               ),
+               mainPanel(
+                 plotOutput("tf_dotplot"),
+                 br(),
+                 plotOutput("tf_ridgeplot"),
+                 br(),
+                 DT::DTOutput("tf_results_table")
+               )
+             )
+    ),
     tabPanel("Cancer Gene Census",
              sidebarLayout(
                sidebarPanel(

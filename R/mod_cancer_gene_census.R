@@ -22,7 +22,7 @@
 mod_cancer_gene_census <- function(input, output, session, res_reactive, filtered_data_rv) {
   
   # Load the Cancer Gene Census data from the app's stored extdata folder
-  census_data <- reactive({
+  census_data <- shiny::reactive({
     # Read the CSV file from the app's extdata folder
     census_file_path <- system.file("extdata", "Census_allWed_Apr_23_2025.csv", package = "TranscriptoPathR")
     req(file.exists(census_file_path))

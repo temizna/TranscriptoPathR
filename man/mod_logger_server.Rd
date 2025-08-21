@@ -9,10 +9,10 @@ mod_logger_server(id, input_all)
 \arguments{
 \item{id}{Shiny module id}
 
-\item{input_all}{The full Shiny input object (passed from main server)}
+\item{input_all}{The full Shiny input object (pass the top-level \code{input})}
 }
 \value{
-A reactive expression with log entries
+reactiveVal character() with log entries
 }
 \description{
 Logger Module Server

@@ -118,3 +118,43 @@ sanitize_ensembl_ids <- function(ids) {
   ids
 }
 
+#' Sanitize strings for safe filenames
+#'
+#' Replaces any characters not in `[A-Za-z0-9._-]` with underscores so the
+#' result is safe to use in filenames and URLs.
+#'
+#' @param x Character vector to sanitize.
+#' @return A character vector with unsafe characters replaced by `_`.
+#' @examples
+#' .safe_tag(c("Ctrl 1", "Treated/A", "weird:name"))
+#' #> "Ctrl_1" "Treated_A" "weird_name"
+#' @export
+.safe_tag <- function(x) gsub("[^A-Za-z0-9._-]+", "_", as.character(x))
+
+
+#' Build a "<ref>_vs_<test>" tag from DE module selection
+#'
+#' Uses the outputs returned by your `mod_de_server()` (i.e., the list with
+#' `ref_level()` and `test_level()` reactives) to build a standardized tag for
+#' filenames, e.g., `"Control_vs_Treated"`. Falls back to `"contrast"` if the
+#' selection isn’t available.
+#'
+#' @param de_sel List returned by `mod_de_server()`, containing at least
+#'   `ref_level()` and `test_level()` reactive functions.
+#' @return A length-1 character string like `"Ref_vs_Test"` or `"contrast"`.
+#' @examples
+#' # Suppose de_sel is the return from mod_de_server(...)
+#' # .contrast_tag_from(de_sel)
+#' @export
+.contrast_tag_from <- function(de_sel) {
+  if (is.null(de_sel)) return("contrast")
+  ref  <- try(de_sel$ref_level(),  silent = TRUE)
+  test <- try(de_sel$test_level(), silent = TRUE)
+  if (inherits(ref, "try-error") || inherits(test, "try-error") ||
+      is.null(ref) || is.null(test) || ref == "" || test == "") {
+    return("contrast")
+  }
+  paste0(.safe_tag(ref), "_vs_", .safe_tag(test))
+}
+
+

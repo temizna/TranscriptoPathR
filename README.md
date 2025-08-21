@@ -1,12 +1,12 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.9.1
+Version: 0.9.2
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
     TransriptoPathR provides an interactive Shiny interface for complete RNA-Seq analysis,
     including data upload, normalization, quality control, differential expression,
-    gene expression visualization, pathway analysis, and GSEA using CRAN and Bioconductor tools.
+    gene expression visualization, pathway analysis, GSEA, and GSVA using CRAN and Bioconductor tools.
 License: MIT
 Encoding: UTF-8
 LazyData: true
@@ -39,7 +39,11 @@ Imports:
     pathfindR,
     AnnotationDbi,
     org.Hs.eg.db,
-    org.Mm.eg.db
+    org.Mm.eg.db,
+    org.Rn.eg.db,
+    limma,
+    GSVA,
+    SummarizedExperiment
 
 Suggests:
     testthat,
@@ -126,7 +130,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 # Install required Bioconductor packages
 BiocManager::install(c(
   "DESeq2", "GEOquery", "Biobase", "clusterProfiler", "enrichplot",
-  "ComplexHeatmap", "msigdbr", "ReactomePA", "pathview",
+  "ComplexHeatmap", "msigdbr","GSEABase", "ReactomePA", "GSVA","SummerizedExperiment","limma",
   "org.Hs.eg.db", "org.Mm.eg.db", "org.Sc.sgd.db","org.Cf.eg.db","org.Rn.eg.db","AnnotationDbi"
 ))
 ```
