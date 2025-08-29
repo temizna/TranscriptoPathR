@@ -2,17 +2,17 @@
 % Please edit documentation in R/mod_pathway_analysis.R
 \name{mod_pathway_server}
 \alias{mod_pathway_server}
-\title{Pathway Analysis Server (namespaced, full logic)}
+\title{Pathway Analysis Server (namespaced, full logic; noisy diagnostics)}
 \usage{
 mod_pathway_server(
   id,
   filtered_data_rv,
   res_reactive,
   geneList_rv,
-  kegg_pathway_results,
   d1_merged_rv,
+  pathway_result_rv,
   de_sel = NULL,
-  pathway_result_rv
+  cmp = NULL
 )
 }
 \arguments{
@@ -24,14 +24,14 @@ mod_pathway_server(
 
 \item{geneList_rv}{reactiveVal to store named log2FC vector (ENTREZID -> log2FC)}
 
-\item{kegg_pathway_results}{reactiveVal (kept for compatibility; not required here)}
-
 \item{d1_merged_rv}{reactiveVal to store merged df (gene, log2FC, padj, ENTREZID)}
 
-\item{de_sel}{(optional) list returned by mod_de_server(), providing ref/test levels for filenames}
-
 \item{pathway_result_rv}{reactiveVal to store the enrichment result object}
+
+\item{de_sel}{optional list returned by mod_de_server(), used for filenames if cmp is NULL}
+
+\item{cmp}{optional comparison bridge from make_cmp_bridge(), preferred for filenames}
 }
 \description{
-Pathway Analysis Server (namespaced, full logic)
+Pathway Analysis Server (namespaced, full logic; noisy diagnostics)
 }

@@ -21,6 +21,98 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # ---------- helpers ----------
+    `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+    sanitize_vec <- function(x) {
+      x <- as.character(x)
+      x <- x[!is.na(x) & nzchar(x)]
+      unique(x)
+    }
+    parse_gene_ratio <- function(gr) {
+      if (!length(gr)) return(NA_real_)
+      if (is.numeric(gr)) return(as.numeric(gr))
+      num <- suppressWarnings(as.numeric(sub("/.*", "", gr)))
+      den <- suppressWarnings(as.numeric(sub(".*/", "", gr)))
+      ifelse(!is.na(num) & !is.na(den) & den > 0, num/den, NA_real_)
+    }
+    # prefer app helpers if present
+    is_symbol <- if (exists("is_symbol", mode = "function")) get("is_symbol") else function(ids) !grepl("^ENS[A-Z]*\\d+", ids)
+    is_ensembl_id <- if (exists("is_ensembl_id", mode = "function")) get("is_ensembl_id") else function(ids) grepl("^ENS[A-Z]*\\d+", ids)
+    get_orgdb <- if (exists("get_orgdb", mode = "function")) get("get_orgdb") else function(species) {
+      sp <- as.character(species)
+      if (sp %in% c("Homo sapiens","human")) { if (requireNamespace("org.Hs.eg.db", quietly=TRUE)) return(org.Hs.eg.db::org.Hs.eg.db) }
+      if (sp %in% c("Mus musculus","mouse")) { if (requireNamespace("org.Mm.eg.db", quietly=TRUE)) return(org.Mm.eg.db::org.Mm.eg.db) }
+      if (sp %in% c("Rattus norvegicus","rat")) { if (requireNamespace("org.Rn.eg.db", quietly=TRUE)) return(org.Rn.eg.db::org.Rn.eg.db) }
+      NULL
+    }
+    get_kegg_code <- if (exists("get_kegg_code", mode = "function")) get("get_kegg_code") else function(species) {
+      sp <- as.character(species)
+      if (sp %in% c("Homo sapiens","human")) return("hsa")
+      if (sp %in% c("Mus musculus","mouse")) return("mmu")
+      if (sp %in% c("Rattus norvegicus","rat")) return("rno")
+      if (sp %in% c("Danio rerio")) return("dre")
+      if (sp %in% c("Bos taurus")) return("bta")
+      NULL
+    }
+    get_reactome_code <- if (exists("get_reactome_code", mode = "function")) get("get_reactome_code") else function(species) {
+      sp <- as.character(species)
+      if (sp %in% c("Homo sapiens","human")) return("human")
+      if (sp %in% c("Mus musculus","mouse")) return("mouse")
+      if (sp %in% c("Rattus norvegicus","rat")) return("rat")
+      NULL
+    }
+    
+    # Safe dotplot for compareCluster (no crash if p.adjust missing)
+    safe_comparecluster_dotplot <- function(cc, showCategory = 10, x = "Cluster") {
+      if (is.null(cc)) return(NULL)
+      df <- as.data.frame(cc)
+      if (!nrow(df)) return(NULL)
+      
+      # Ensure columns needed for plotting exist
+      if (!"p.adjust" %in% names(df)) {
+        if ("pvalue" %in% names(df)) df$p.adjust <- df$pvalue else df$p.adjust <- NA_real_
+      }
+      # Count & GeneRatio
+      if (!"Count" %in% names(df) && "core_enrichment" %in% names(df)) {
+        df$Count <- vapply(strsplit(df$core_enrichment, "/"), length, integer(1))
+      }
+      if (!"GeneRatio" %in% names(df) || all(is.na(df$GeneRatio))) {
+        if ("setSize" %in% names(df) && "Count" %in% names(df)) {
+          df$GeneRatio <- paste0(df$Count, "/", df$setSize)
+        } else {
+          df$GeneRatio <- NA_character_
+        }
+      }
+      df$GeneRatioNum <- parse_gene_ratio(df$GeneRatio)
+      
+      # Order by significance within each cluster
+      if ("Cluster" %in% names(df)) {
+        df <- df[order(df$Cluster, df$p.adjust, df$pvalue %||% Inf), ]
+        # keep up to showCategory per cluster
+        df <- do.call(rbind, lapply(split(df, df$Cluster), function(s) head(s, showCategory)))
+      } else {
+        df <- head(df[order(df$p.adjust, df$pvalue %||% Inf), ], showCategory)
+      }
+      
+      # Manual ggplot (avoids enrichplot aesthetics issues)
+      color_var <- if (all(is.na(df$p.adjust))) NULL else "p.adjust"
+      p <- ggplot2::ggplot(
+        df,
+        ggplot2::aes(
+          x = .data[[x]],
+          y = reorder(.data$Description, .data$p.adjust, function(v) -rank(v, na.last = "keep")),
+          size = .data$Count
+        )
+      ) +
+        ggplot2::geom_point(ggplot2::aes(color = !!(if (!is.null(color_var)) rlang::sym(color_var) else rlang::sym("Count")))) +
+        ggplot2::labs(x = x, y = NULL, size = "Gene Count", color = if (is.null(color_var)) "Count" else "Adj. P") +
+        ggplot2::theme_minimal(base_size = 11)
+      if (!is.null(color_var)) {
+        p <- p + ggplot2::scale_color_continuous(low = "#276EF1", high = "#F04438", trans = "reverse")
+      }
+      p
+    }
+    
     crossplot_data <- shiny::reactiveVal(NULL)
     
     # 1) Populate metadata selects ----
@@ -36,8 +128,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     # X levels
     shiny::observeEvent(input$metadata_column_x, {
       shiny::req(filtered_data_rv$samples, input$metadata_column_x)
-      lv <- unique(as.character(filtered_data_rv$samples[[input$metadata_column_x]]))
-      lv <- lv[!is.na(lv)]
+      lv <- sanitize_vec(filtered_data_rv$samples[[input$metadata_column_x]])
       shiny::updateSelectInput(session, "reference_condition_x",
                                choices = lv, selected = if (length(lv)) lv[1] else character(0))
       shiny::updateSelectInput(session, "test_condition_x",
@@ -47,8 +138,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     # Y levels
     shiny::observeEvent(input$metadata_column_y, {
       shiny::req(filtered_data_rv$samples, input$metadata_column_y)
-      lv <- unique(as.character(filtered_data_rv$samples[[input$metadata_column_y]]))
-      lv <- lv[!is.na(lv)]
+      lv <- sanitize_vec(filtered_data_rv$samples[[input$metadata_column_y]])
       shiny::updateSelectInput(session, "reference_condition_y",
                                choices = lv, selected = if (length(lv)) lv[1] else character(0))
       shiny::updateSelectInput(session, "test_condition_y",
@@ -81,24 +171,22 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       samples <- filtered_data_rv$samples
       counts  <- filtered_data_rv$counts
       
-      # Compose contrasts
       x_comp <- c(input$metadata_column_x, input$test_condition_x, input$reference_condition_x)
       y_comp <- c(input$metadata_column_y, input$test_condition_y, input$reference_condition_y)
       
-      # Build DE objects as needed
-      if (!paste(x_comp, collapse = "_") %in% DESeq2::resultsNames(filtered_dds_rv())) {
-        dds_x <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = samples,
-                                                design = stats::as.formula(paste("~", input$metadata_column_x)))
-        dds_x <- DESeq2::DESeq(dds_x)
-      } else dds_x <- filtered_dds_rv()
+      # Build DE objects (don’t rely on resultsNames format)
+      dds_x <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = samples,
+                                              design = stats::as.formula(paste("~", input$metadata_column_x)))
+      dds_x[[input$metadata_column_x]] <- stats::relevel(factor(dds_x[[input$metadata_column_x]]),
+                                                         ref = input$reference_condition_x)
+      dds_x <- DESeq2::DESeq(dds_x)
       
-      if (!paste(y_comp, collapse = "_") %in% DESeq2::resultsNames(filtered_dds_rv())) {
-        dds_y <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = samples,
-                                                design = stats::as.formula(paste("~", input$metadata_column_y)))
-        dds_y <- DESeq2::DESeq(dds_y)
-      } else dds_y <- filtered_dds_rv()
+      dds_y <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = samples,
+                                              design = stats::as.formula(paste("~", input$metadata_column_y)))
+      dds_y[[input$metadata_column_y]] <- stats::relevel(factor(dds_y[[input$metadata_column_y]]),
+                                                         ref = input$reference_condition_y)
+      dds_y <- DESeq2::DESeq(dds_y)
       
-      # Results
       res_x <- DESeq2::results(dds_x, contrast = x_comp)
       res_y <- DESeq2::results(dds_y, contrast = y_comp)
       res_x <- res_x[!is.na(res_x$padj) & !is.na(res_x$log2FoldChange), ]
@@ -115,25 +203,33 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       
       merged_df <- merge(df_x, df_y, by = "gene", all = TRUE)
       
-      # Labels
+      # Display label column (SYMBOL if possible)
+      merged_df$display_gene <- merged_df$gene
+      if (is_ensembl_id(merged_df$gene)) {
+        conv <- convert_ensembl_to_symbol(merged_df$gene, filtered_data_rv$species)
+        merged_df$display_gene <- ifelse(is.na(conv) | !nzchar(conv), merged_df$gene, conv)
+      }
+      
+      # Labels: top by worst padj & user highlights (match against both SYMBOL and raw ids)
       nlab <- tryCatch({ n <- as.numeric(input$crossplot_topgenes); if (is.na(n) || n < 0) 0 else n }, error = function(e) 0)
       merged_df$combined_padj <- pmax(merged_df$padj_x, merged_df$padj_y, na.rm = TRUE)
       
       top_genes <- character(0)
       if (nlab > 0 && nrow(merged_df)) {
-        ord <- merged_df[order(merged_df$combined_padj), "gene"]
-        top_genes <- head(ord, nlab)
-        if (is_ensembl_id(top_genes)) {
-          conv <- convert_ensembl_to_symbol(top_genes, filtered_data_rv$species)
-          conv[is.na(conv)] <- top_genes[is.na(conv)]
+        top_ids <- head(merged_df[order(merged_df$combined_padj), "gene"], nlab)
+        # convert to SYMBOL for label if possible
+        if (is_ensembl_id(top_ids)) {
+          conv <- convert_ensembl_to_symbol(top_ids, filtered_data_rv$species)
+          conv[is.na(conv)] <- top_ids[is.na(conv)]
           top_genes <- conv
+        } else {
+          top_genes <- top_ids
         }
       }
-      
       highlight <- input$crossplot_gene_label
-      highlight <- if (nchar(trimws(highlight)) > 0) unlist(stringr::str_split(highlight, "[\\s,]+")) else character(0)
+      highlight <- if (nchar(trimws(highlight)) > 0) unlist(strsplit(highlight, "[\\s,]+")) else character(0)
       
-      merged_df$label <- ifelse(merged_df$gene %in% union(top_genes, highlight), merged_df$gene, NA)
+      merged_df$label <- ifelse(merged_df$display_gene %in% union(top_genes, highlight), merged_df$display_gene, NA)
       merged_df <- merged_df[order(merged_df$padj_x), ]
       crossplot_data(merged_df)
     })
@@ -184,7 +280,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
         if (nrow(lab_df)) {
           p <- p + ggrepel::geom_text_repel(
             data = lab_df, ggplot2::aes(label = .data$label),
-            max.overlaps = Inf, size = 5, box.padding = 0.1
+            max.overlaps = Inf, size = 4, box.padding = 0.15
           )
         }
       }
@@ -218,11 +314,9 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     
     # ---- 4) Pathway Dotplot tab ----
     generate_cross_pathway_plot <- function(df, species) {
-      if (is.null(species) || is.na(species) || identical(species, "")) {
-        species <- "Homo sapiens"
-        shiny::showNotification("Species not specified. Defaulting to Homo sapiens.", type = "warning")
-      }
+      species <- species %||% "Homo sapiens"
       orgdb <- get_orgdb(species)
+      if (is.null(orgdb)) return(NULL)
       
       df$combined_padj <- pmax(df$padj_x, df$padj_y, na.rm = TRUE)
       df$category <- "Other"
@@ -238,6 +332,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       } else {
         df_ids <- clusterProfiler::bitr(df$gene, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = orgdb)
       }
+      if (is.null(df_ids) || !nrow(df_ids)) return(NULL)
       df_merged <- merge(df, df_ids, by.x = "gene", by.y = 1)
       df_merged <- dplyr::distinct(df_merged, ENTREZID, .keep_all = TRUE)
       df_merged2 <- df_merged[, c("ENTREZID", "log2FoldChange_x", "category")]
@@ -245,26 +340,27 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       if (!nrow(df_merged2)) return(NULL)
       
       m <- input$cross_enrich_method
+      cc <- NULL
       if (m == "enrichGO") {
-        formula_res <- clusterProfiler::compareCluster(
+        cc <- clusterProfiler::compareCluster(
           ENTREZID ~ category, data = df_merged2, fun = "enrichGO",
           OrgDb = orgdb, keyType = "ENTREZID", ont = "BP",
           pAdjustMethod = "BH", pvalueCutoff = 0.05, qvalueCutoff = 0.2, readable = TRUE
         )
       } else if (m == "groupGO") {
-        formula_res <- clusterProfiler::compareCluster(
+        cc <- clusterProfiler::compareCluster(
           ENTREZID ~ category, data = df_merged2, fun = "groupGO",
           OrgDb = orgdb, keyType = "ENTREZID", ont = "BP", readable = TRUE
         )
       } else if (m == "enrichKEGG") {
         kegg_sp <- get_kegg_code(species); if (is.null(kegg_sp)) return(NULL)
-        formula_res <- clusterProfiler::compareCluster(
+        cc <- clusterProfiler::compareCluster(
           ENTREZID ~ category, data = df_merged2, fun = "enrichKEGG",
           organism = kegg_sp, pvalueCutoff = 0.05, qvalueCutoff = 0.2
         )
       } else if (m == "enrichPathway") {
         rc <- get_reactome_code(species); if (is.null(rc)) return(NULL)
-        formula_res <- clusterProfiler::compareCluster(
+        cc <- clusterProfiler::compareCluster(
           ENTREZID ~ category, data = df_merged2, fun = ReactomePA::enrichPathway,
           organism = rc, pvalueCutoff = 0.05, qvalueCutoff = 0.2, readable = TRUE
         )
@@ -273,8 +369,9 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
         return(NULL)
       }
       
-      if (is.null(formula_res) || !nrow(as.data.frame(formula_res))) return(NULL)
-      enrichplot::dotplot(formula_res, x = "category")
+      if (is.null(cc) || !nrow(as.data.frame(cc))) return(NULL)
+      # robust dot plot (no fill = p.adjust crash)
+      safe_comparecluster_dotplot(cc, showCategory = input$crossplot_topgenes %||% 10, x = "Cluster")
     }
     
     output$crosspathplot <- shiny::renderPlot({
@@ -297,17 +394,20 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     # ---- 5) Venn tab ----
     generate_cross_venn_plot <- function(df) {
       lfc_cutoff <- 1; padj_cutoff <- 0.05
-      up_x   <- df$gene[df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff]
-      up_y   <- df$gene[df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff]
-      down_x <- df$gene[df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff]
-      down_y <- df$gene[df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff]
+      up_x   <- sanitize_vec(df$gene[df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff])
+      up_y   <- sanitize_vec(df$gene[df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff])
+      down_x <- sanitize_vec(df$gene[df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff])
+      down_y <- sanitize_vec(df$gene[df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff])
       
-      up_venn <- VennDiagram::venn.diagram(
+      # If both empty, draw a friendly placeholder instead of throwing
+      if (!length(up_x) && !length(up_y)) up_venn  <- grid::grid.text("No upregulated genes")
+      else up_venn <- VennDiagram::venn.diagram(
         x = list(X_Up = up_x, Y_Up = up_y),
         filename = NULL, fill = c("darkorange", "darkgreen"), alpha = 0.5,
         main = "Upregulated Genes Venn", disable.logging = TRUE
       )
-      down_venn <- VennDiagram::venn.diagram(
+      if (!length(down_x) && !length(down_y)) down_venn <- grid::grid.text("No downregulated genes")
+      else down_venn <- VennDiagram::venn.diagram(
         x = list(X_Down = down_x, Y_Down = down_y),
         filename = NULL, fill = c("royalblue", "purple"), alpha = 0.5,
         main = "Downregulated Genes Venn", disable.logging = TRUE
@@ -348,10 +448,10 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
         shiny::req(crossplot_data())
         df <- crossplot_data()
         lfc_cutoff <- 1; padj_cutoff <- 0.05
-        up_x   <- df$gene[df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff]
-        up_y   <- df$gene[df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff]
-        down_x <- df$gene[df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff]
-        down_y <- df$gene[df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff]
+        up_x   <- sanitize_vec(df$gene[df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff])
+        up_y   <- sanitize_vec(df$gene[df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff])
+        down_x <- sanitize_vec(df$gene[df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff])
+        down_y <- sanitize_vec(df$gene[df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff])
         
         out <- rbind(
           data.frame(Gene = intersect(up_x, up_y),   Direction = "Upregulated"),
@@ -361,7 +461,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       }
     )
     
-    # ---- 6) Heatmap tab (with Ensembl->Symbol row labels) ----
+    # ---- 6) Heatmap tab (SYMBOL row labels if possible) ----
     generate_cross_heat <- function(df, norm_counts, samples, meta_col_x, species) {
       df$category <- "Other"
       df$category[df$log2FoldChange_x >=  1 & df$log2FoldChange_y >=  1] <- "Up-Up"
@@ -372,20 +472,17 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       sel <- unique(df$gene[!(df$category %in% c("Other", "Comp1-only", "Comp2-only"))])
       if (!length(sel)) return(NULL)
       
-      # Subset matrix and log transform
       expr_mat <- log2(norm_counts[sel, , drop = FALSE] + 1)
       
-      # --- Row label conversion: Ensembl -> Symbol (fallback to Ensembl) ---
+      # Rename rows to SYMBOL where possible
       if (is_ensembl_id(sel)) {
         sym <- convert_ensembl_to_symbol(sel, species)
-        row_labels <- ifelse(is.na(sym) | sym == "", sel, sym)
+        row_labels <- ifelse(is.na(sym) | !nzchar(sym), sel, sym)
         rownames(expr_mat) <- make.unique(row_labels)
       } else {
-        # already symbols; just ensure uniqueness
         rownames(expr_mat) <- make.unique(rownames(expr_mat))
       }
       
-      # Annotation by selected X metadata
       group_values <- as.character(samples[[meta_col_x]])
       group_levels <- unique(group_values)
       pal <- if (length(group_levels) <= 8) {

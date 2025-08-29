@@ -4,21 +4,28 @@
 \alias{mod_de_server}
 \title{Differential Expression Server Module (DESeq2)}
 \usage{
-mod_de_server(id, filtered_data_rv, filtered_dds_rv, res_reactive)
+mod_de_server(id, filtered_data_rv, filtered_dds_rv, res_reactive, cmp = NULL)
 }
 \arguments{
-\item{id}{Shiny module id (must match mod_de_tab_ui)}
+\item{id}{module id (must match mod_de_tab_ui)}
 
-\item{filtered_data_rv}{reactiveValues with $samples, $norm_counts, $species}
+\item{filtered_data_rv}{reactiveValues with $samples, $counts, $norm_counts, $species}
 
-\item{filtered_dds_rv}{reactiveVal holding a DESeqDataSet (subsetted)}
+\item{filtered_dds_rv}{reactiveVal (optional) holding a DESeqDataSet}
 
-\item{res_reactive}{reactiveVal to store DESeq2 result data.frame}
+\item{res_reactive}{reactiveVal to store DESeq2 results data.frame}
+
+\item{cmp}{optional list from mod_easy_compare_server(): included_samples(), cmp_factor(), tag(), label()}
 }
 \value{
-list of reactives: group_var, ref_level, test_level
+list reactives: group_var, ref_level, test_level, cmp_factor, included_samples
 }
 \description{
-Runs DESeq2, renders a results table, and draws a ComplexHeatmap of top genes.
-Exposes selected contrast so other modules (e.g., GSVA) can reuse it.
+If a comparison builder \code{cmp} is supplied and has a valid selection,
+the DE tab runs on that subset with design \code{~ cmp_group} and a
+Reference/Test contrast. It NEVER mutates filtered_data_rv$samples.
+}
+\details{
+Also supports extra column annotations for the heatmap via input$ann_cols
+(multi-select UI added in the DE sidebar).
 }

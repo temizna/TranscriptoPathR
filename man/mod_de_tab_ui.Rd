@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_de_tab_ui.R
 \name{mod_de_tab_ui}
 \alias{mod_de_tab_ui}
-\title{Differential Expression tabPanel (UI module)}
+\title{Differential Expression UI (tab) — supports Comparison Builder}
 \usage{
 mod_de_tab_ui(id)
 }
@@ -10,5 +10,5 @@ mod_de_tab_ui(id)
 \item{id}{module id}
 }
 \description{
-Differential Expression tabPanel (UI module)
+Differential Expression UI (tab) — supports Comparison Builder
 }

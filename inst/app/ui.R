@@ -1,220 +1,210 @@
-ui <- fluidPage(
-  theme = shinythemes::shinytheme("cerulean"),
-  titlePanel("TranscriptoPathR: An R Shiny App to Anaylze RNASeq data"),
-  tabsetPanel(
-    tabPanel("Load Your Data",
-             sidebarLayout(
-               sidebarPanel(
-                 radioButtons("data_mode", "Data Mode", choices = c("Load Your Own" = "load", "Use Demo Data" = "demo"), selected = "load"),
-                 conditionalPanel(
-                   condition = "input.data_mode == 'load'",
-                   fileInput("counts_file", "Load RNA-Seq Counts File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
-                   fileInput("design_file", "Load Design/Metadata File (CSV or XLSX)", accept = c(".csv", ".xlsx")),
-                   # Inside your "Upload Data" tabPanel
-                   textInput("design_formula", "Study Design Formula (you can put main column name. If more than one use + between names", value = "~ condition"),
-                   selectInput("species", "Select Species", 
-                               choices = c("Homo sapiens", "Mus musculus","Rattus norvegicus"),# "Saccharomyces cerevisiae", "Canis familiaris"),
-                               selected = "Homo sapiens"),
-                   actionButton("load_data", "Load Data"),
-                   downloadButton("download_counts_template", "Download Counts Template"),
-                   downloadButton("download_design_template", "Download Sample Template"),
-                   helpText("Loads raw counts and sample metadata from GEO if available. Only studies with count data are supported. Currently under construction"),
-                  # textInput("geo_accession", "Enter GEO Accession (e.g., GSE287953)", value = ""),
-                  # actionButton("load_geo", "Load Data from GEO")
-                 )
-               ),
-               mainPanel(
-                 helpText("Accepted formats: .csv or .xlsx. First column = gene/sample names. 
-                         Raw count data from TCGA can also be used for this analysis. Use of TPM, FPKM, RSEM is not recommended.
-                         Samples  should be in columns for the counts data, and in rows as row names for design/sample/experiment sheet. 
-                         Design column names (e.g., '~condition') must be valid in formula.
-                         If using more than one column name, use + e.g. ~condition+time. 
-                         If multiple column names are used and they do not vary accors other conditions and samples DESEQ will return an error!
-                         To fix this error remove the column name that does not vary."),
-                 tags$hr(),
-                 
-                 tags$figure(
-                   tags$img(
-                     src = "sample_sheet_guide.png",
-                     class = "guide-img",
-                     alt = "Valid sample/metadata sheet with required columns highlighted"
-                   ),
-                   tags$figcaption("Sample/Design Sheet: rows = samples; columns = metadata (e.g., condition, batch).")
-                 ),
-                 
-                 tags$figure(
-                   tags$img(
-                     src = "expression_matrix_guide.png",
-                     class = "guide-img",
-                     alt = "Valid counts matrix with genes as rows and samples as columns"
-                   ),
-                   tags$figcaption("Counts Matrix: rows = genes; columns = samples. First column = gene IDs.")
-                 ),
-                 DT::DTOutput("uploaded_counts"),
-                 DT::DTOutput("uploaded_design")
-               )
-             )
-    ),
-    tabPanel("Sample Select",
-             { 
-               ns <- NS("sample_select")   # <<-- add this inside the panel code block
-               
-               sidebarLayout(
-                 sidebarPanel(
-                   actionButton(ns("select_all"), "Select All Samples"),
-                   uiOutput(ns("dynamic_filters")),
-                   actionButton(ns("run_filter"), "Apply Filters"),
-                   actionButton(ns("deselect_all"), "Deselect All Samples")
-                 ),
-                 mainPanel(
-                   DT::DTOutput(ns("sampleTable"))
-                 )
-               )
-             }
-    ),
-    tabPanel("Individual Gene Expression", 
-             sidebarLayout(
-               sidebarPanel(
-                 textInput("gene_select", "Enter Gene(s) (space-separated):", value = ""),
-                 selectInput("group_select_geneexpr", "Group by:", choices = NULL),
-                 downloadButton("download_gene_plot", "Download Plot"),
-                 downloadButton("download_gene_stats", "Download ANOVA Table")
-                 
-               ),
-               mainPanel(
-                 plotOutput("geneExpressionPlot"),
-                 br(),
-                 DT::dataTableOutput("geneExpressionStats")
-               )
-             )
-    ),
-    tabPanel("Quality Check", 
-             sidebarLayout(
-               sidebarPanel(
-                 selectInput("qc_plot_type", "Select QC Plot:", choices = c("PCA", "Sample Distance", "Mean-Variance", "Variance Histogram")),
-                 selectInput("group_select_qc", "Group by:", choices = NULL),
-                 checkboxInput("show_labels", "Show Labels", value = TRUE),
-                 textInput("qc_plot_filename", "QC Plot Filename:", value = "qc_plot.pdf"),
-                 downloadButton("download_qc_plot", "Download Plot")
-               ),
-               mainPanel(
-                 plotOutput("qcPlot"),
-                 br(),
-                 textOutput("qcPlotDescription")
-               )
-             )
-    ),  
-    tabPanel(
-      title = "Genes of Interest Heatmap",
-      sidebarLayout(
-        sidebarPanel(
-          fileInput("goi_file", "Upload Gene List (CSV, single column)"),
-          selectInput("goi_group_column", "Group annotation variable:", choices = NULL),
-          checkboxInput("cluster_columns", "Cluster Columns", value = TRUE)
+# app/ui.R
+
+bs <- getOption("TranscriptoPathR.bs", default = tpr_theme())
+
+ui <- shiny::fluidPage(
+  theme = bs,
+  div(class = "tpr-app",
+  shiny::titlePanel("TranscriptoPathR: An R Shiny App to Anaylze RNASeq data"),
+  shiny::tabsetPanel(
+    
+    # ---- Load Your Data ----
+    shiny::tabPanel(
+      "Load Your Data",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::radioButtons(
+            "data_mode", "Data Mode",
+            choices = c("Load Your Own" = "load", "Use Demo Data" = "demo"),
+            selected = "load"
+          ),
+          shiny::conditionalPanel(
+            condition = "input.data_mode == 'load'",
+            shiny::fileInput("counts_file", "Load RNA-Seq Counts File (CSV or XLSX)",
+                             accept = c(".csv", ".xlsx")),
+            shiny::fileInput("design_file", "Load Design/Metadata File (CSV or XLSX)",
+                             accept = c(".csv", ".xlsx")),
+            shiny::textInput(
+              "design_formula",
+              "Study Design Formula (you can put main column name. If more than one use + between names",
+              value = "~ condition"
+            ),
+            shiny::selectInput(
+              "species", "Select Species",
+              choices = c("Homo sapiens", "Mus musculus", "Rattus norvegicus"),
+              selected = "Homo sapiens"
+            ),
+            shiny::actionButton("load_data", "Load Data"),
+            shiny::downloadButton("download_counts_template", "Download Counts Template"),
+            shiny::downloadButton("download_design_template", "Download Sample Template")
+          )
         ),
-        mainPanel(
-          plotOutput("goi_heatmap"),
-          downloadButton("download_goi_heatmap", "Download Heatmap")
+        shiny::mainPanel(
+          shiny::helpText(
+            "Accepted formats: .csv or .xlsx. First column = gene/sample names. ",
+            "Raw count data from TCGA can also be used. Use of TPM, FPKM, RSEM is not recommended. ",
+            "Samples should be in columns for the counts data, and in rows as row names for the design sheet. ",
+            "Design column names (e.g., '~condition') must be valid in a formula. ",
+            "If using more than one column, use + (e.g., ~condition+time). ",
+            "If a chosen column does not vary across samples, DESeq2 will error."
+          ),
+          shiny::tags$hr(),
+          shiny::tags$figure(
+            shiny::tags$img(src = "sample_sheet_guide.png", class = "guide-img",
+                            alt = "Valid sample/metadata sheet"),
+            shiny::tags$figcaption("Sample/Design Sheet: rows = samples; columns = metadata.")
+          ),
+          shiny::tags$figure(
+            shiny::tags$img(src = "expression_matrix_guide.png", class = "guide-img",
+                            alt = "Valid counts matrix"),
+            shiny::tags$figcaption("Counts Matrix: rows = genes; columns = samples. First column = gene IDs.")
+          ),
+          DT::DTOutput("uploaded_counts"),
+          DT::DTOutput("uploaded_design")
         )
       )
     ),
+    
+    # ---- Sample Select ----
+    shiny::tabPanel(
+      "Sample Select",
+      {
+        ns <- shiny::NS("sample_select")
+        shiny::sidebarLayout(
+          shiny::sidebarPanel(
+            shiny::actionButton(ns("select_all"), "Select All Samples"),
+            shiny::uiOutput(ns("dynamic_filters")),
+            shiny::actionButton(ns("run_filter"), "Apply Filters"),
+            shiny::actionButton(ns("deselect_all"), "Deselect All Samples")
+          ),
+          shiny::mainPanel(DT::DTOutput(ns("sampleTable")))
+        )
+      }
+    ),
+    
+    # ---- Individual Gene Expression ----
+    shiny::tabPanel(
+      "Individual Gene Expression",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::textInput("gene_select", "Enter Gene(s) (space-separated):", value = ""),
+          shiny::selectInput("group_select_geneexpr", "Group by:", choices = NULL),
+          shiny::downloadButton("download_gene_plot", "Download Plot"),
+          shiny::downloadButton("download_gene_stats", "Download ANOVA Table")
+        ),
+        shiny::mainPanel(
+          shiny::plotOutput("geneExpressionPlot"),
+          shiny::br(),
+          DT::dataTableOutput("geneExpressionStats")
+        )
+      )
+    ),
+    
+    # ---- Quality Check ----
+    shiny::tabPanel(
+      "Quality Check",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::selectInput("qc_plot_type", "Select QC Plot:",
+                             choices = c("PCA", "Sample Distance", "Mean-Variance", "Variance Histogram")),
+          shiny::selectInput("group_select_qc", "Group by:", choices = NULL),
+          shiny::checkboxInput("show_labels", "Show Labels", value = TRUE),
+          shiny::textInput("qc_plot_filename", "QC Plot Filename:", value = "qc_plot.pdf"),
+          shiny::downloadButton("download_qc_plot", "Download Plot")
+        ),
+        shiny::mainPanel(
+          shiny::plotOutput("qcPlot"),
+          shiny::br(),
+          shiny::textOutput("qcPlotDescription")
+        )
+      )
+    ),
+    
+    # ---- Genes of Interest Heatmap ----
+    shiny::tabPanel(
+      "Genes of Interest Heatmap",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::fileInput("goi_file", "Upload Gene List (CSV, single column)"),
+          shiny::selectInput("goi_group_column", "Group annotation variable:", choices = NULL),
+          shiny::checkboxInput("cluster_columns", "Cluster Columns", value = TRUE)
+        ),
+        shiny::mainPanel(
+          shiny::plotOutput("goi_heatmap"),
+          shiny::downloadButton("download_goi_heatmap", "Download Heatmap")
+        )
+      )
+    ),
+    
+    # ---- Comparison Builder (returns tabPanel) ----
+    mod_easy_compare_ui("cmp"),
+    
+    # ---- Differential Expression (returns tabPanel) ----
     mod_de_tab_ui("de"),
-    tabPanel("Volcano Plot",
-             sidebarLayout(
-               sidebarPanel(
-                 textInput("volcano_select", "Enter Gene(s) (space-separated):", value = ""),
-                 numericInput("volcano_gene_label", "Top N Genes to Label:", value = 10, min = 5, max = 50, step = 1),
-                 sliderInput("volcano_lfc", "Log2 Fold Change Cutoff", min = 0, max = 4, value = 1, step = 0.1),
-                 sliderInput("volcano_padj", "Adjusted P-value Cutoff", min = 0, max = 0.1, value = 0.05, step = 0.005),
-                 downloadButton("download_volcano_plot", "Download Volcano Plot"),
-                 downloadButton("download_ma_plot", "Download MA Plot")
-               ),
-               mainPanel(
-                 plotOutput("volcanoPlot"),
-                 br(),
-                 plotOutput("maPlot")               
-               )
-             )
-    ),         
+    
+    # ---- Volcano Plot ----
+    shiny::tabPanel(
+      "Volcano Plot",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::textInput("volcano_select", "Enter Gene(s) (space-separated):", value = ""),
+          shiny::numericInput("volcano_gene_label", "Top N Genes to Label:", value = 10, min = 5, max = 50, step = 1),
+          shiny::sliderInput("volcano_lfc",  "Log2 Fold Change Cutoff", min = 0, max = 4, value = 1, step = 0.1),
+          shiny::sliderInput("volcano_padj", "Adjusted P-value Cutoff",  min = 0, max = 0.1, value = 0.05, step = 0.005),
+          shiny::downloadButton("download_volcano_plot", "Download Volcano Plot"),
+          shiny::downloadButton("download_ma_plot",      "Download MA Plot")
+        ),
+        shiny::mainPanel(
+          shiny::div(class = "tpr-surface", shiny::plotOutput("volcanoPlot")),
+          shiny::br(),
+          shiny::div(class = "tpr-surface", shiny::plotOutput("maPlot"))
+        )
+      )
+    ),
+    
+    # ---- Cross Plot (returns tabPanel) ----
     mod_cross_tab_ui("cross"),
-    tabPanel("GSEA",           mod_gsea_tab_ui("gsea")),
-    tabPanel("Pathway Analysis", mod_pathway_ui("pathway")),
-    tabPanel("Pathway Plots",    mod_pathway_plots_ui("pathplots")),
-    tabPanel("Non-overlap Genes Pathway Analysis", mod_nonoverlap_tab_ui("nonOL")),
-    tabPanel("GSVA / ssGSEA", mod_gsva_ui("gsva")),
-    tabPanel("Transcription Factor Enrichment", mod_tf_tab_ui("tf")),
-    tabPanel("Cancer Gene Census",
-             sidebarLayout(
-               sidebarPanel(
-                 actionButton("run_cancer_gene_census", "Run Cancer Gene Census Analysis"),
-                 downloadButton("download_cancer_gene_table", "Download Overlapping Genes Table"),
-                 downloadButton("download_cgc_venn_plot", "Download Overlapping Venn Plot")
-               ),
-               mainPanel(
-                 plotOutput("vennPlot"),
-                 br(),
-                 DT::DTOutput("overlappingGenesTable")
-               )
-             )
+    
+    # ---- GSEA (module returns plain UI -> wrap) ----
+    shiny::tabPanel("GSEA", mod_gsea_tab_ui("gsea")),
+    
+    # ---- Pathway Analysis (module returns plain UI -> wrap) ----
+    shiny::tabPanel("Pathway Analysis", mod_pathway_ui("pathway")),
+    
+    # ---- Pathway Plots (module returns plain UI -> wrap) ----
+    shiny::tabPanel("Pathway Plots", mod_pathway_plots_ui("pathplots")),
+    
+    # ---- Non-overlap Genes Pathway Analysis (module returns plain UI -> wrap) ----
+    shiny::tabPanel("Non-overlap Genes Pathway Analysis", mod_nonoverlap_tab_ui("nonOL")),
+    
+    # ---- GSVA / ssGSEA (module returns plain UI -> wrap) ----
+    shiny::tabPanel("GSVA / ssGSEA", mod_gsva_ui("gsva")),
+    
+    # ---- Transcription Factor Enrichment (module returns plain UI -> wrap) ----
+    shiny::tabPanel("Transcription Factor Enrichment", mod_tf_tab_ui("tf")),
+    
+    # ---- Cancer Gene Census ----
+    shiny::tabPanel(
+      "Cancer Gene Census",
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          shiny::actionButton("run_cancer_gene_census", "Run Cancer Gene Census Analysis"),
+          shiny::downloadButton("download_cancer_gene_table", "Download Overlapping Genes Table"),
+          shiny::downloadButton("download_cgc_venn_plot",     "Download Overlapping Venn Plot")
+        ),
+        shiny::mainPanel(
+          shiny::plotOutput("vennPlot"),
+          shiny::br(),
+          DT::DTOutput("overlappingGenesTable")
+        )
+      )
     ),
-    tabPanel("PCA Cluster",
-             sidebarLayout(
-               sidebarPanel(
-                 sliderInput("max_pc", "Max number of PCs", min = 2, max = 20, value = 10),
-                 sliderInput("variance_threshold", "Variance threshold", min = 0.25, max = 4, value = 1, step = 0.05),
-                 sliderInput("percent_of_data", "Percent of data coverage", min = 0.25, max = 1, value = 0.8, step = 0.01),
-                 sliderInput("similarity_threshold", "Similarity for gene to Component assignment", min = 0, max = 1, value = 0.1),
-                 numericInput("max_genes", "Max genes per PC", value = 500, min = 50, max = 1000),
-                 numericInput("min_genes", "Min genes per PC", value = 50, min = 10, max = 500),
-                 selectInput("pca_enrich_method", "Enrichment Method",
-                             choices = c("groupGO", "enrichGO", "enrichKEGG", "enrichDO", "enrichPathway"),
-                             selected = "enrichGO"),
-                 actionButton("run_pca", "Run PCA Clustering"),
-                 downloadButton("download_pca_loadings", "Download Contributing Genes Heatmap"),
-                 downloadButton("download_pca_enrichment", "Download Enrichment Plot"),
-                 downloadButton("download_reconstructed_heatmap", "Download Reconstructed Heatmap"),
-                 downloadButton("download_sample_correlation_heatmap", "Download Sample Correlation"),
-                 downloadButton("download_pca_loadings_table", "Download Contributing Genes Table"),
-                 downloadButton("download_pca_enrichment_table", "Download Enrichment Table")
-               ),
-               mainPanel(
-                 helpText("This module performs Principal Component Analysis (PCA) to help you determine whether advanced methods like Consensus 
-                 Clustering (CC) or Non-negative Matrix Factorization (NMF) may be useful for further exploring sample substructure and 
-                 identifying gene contributors to sub-clusters. Since CC and NMF are computationally intensive, they are not included in this app.
-                 If needed, we recommend that users consult with an expert to run these analyses externally.
-
-                Inputs and parameters:
-
-                Number of PCs: The initial maximum number of principal components to compute.
-                
-                Variance threshold: Filters genes by standard deviation; only genes above the threshold are retained.
-                
-                Percent of data coverage: Sets the cumulative variance cutoff; selects the number of PCs required 
-                to explain this percentage of total variance.
-                
-                Similarity threshold: Determines whether a gene can be associated with multiple PCs based on its relative loading and 
-                if the loadings of different PCs are withing this threshold.
-                
-                Gene limits: You can set minimum and maximum numbers of genes per component for downstream pathway enrichment analysis.
-
-                          "),
-                 plotOutput("pca_variance_plot"),
-                 br(),
-                 textOutput("selected_pc_text"),
-                 br(),
-                 plotOutput("pca_loadings_heatmap"),
-                # br(),
-                # plotOutput("pca_reconstructed_heatmap"),
-                 br(),
-                 plotOutput("pca_sample_heatmap"),
-                 br(),
-                 plotOutput("pca_enrichment_plot")
-               )
-             )
-    ),
-     tabPanel(
-      "Log",
-      mod_logger_ui("logger")  # 'logger' is the module ID
-    )
+    
+    # ---- PCA Cluster (returns tabPanel) ----
+    mod_pca_tab_ui("pca"),
+    
+    # ---- Log (module returns plain UI -> wrap) ----
+    shiny::tabPanel("Log", mod_logger_ui("logger"))
+  )
   )
 )

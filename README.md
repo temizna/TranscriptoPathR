@@ -73,9 +73,10 @@ VignetteBuilder: knitr
   - PCA, sample distance heatmaps, mean-variance plots, variance histograms
 - **Genes of interest Heatmap Visualization**
   - Gene expression heatmap of uploaded genes of interest grouped by metadata categories
-
+- **Complex Comparison Builder**
+  - Customized complex comparison builder. Useful for combining multiple conditions (pool levels) and adjusting for other variables.
 - **Differential Expression Analysis**  
-  - DESeq2-based analysis with customizable thresholds and conditions
+  - DESeq2-based analysis with customizable thresholds and conditions, or use the groupings from complex comparison builder (default)
   - Heatmap of top differentially expressed genes 
   - Users can download DE table.
 
@@ -120,6 +121,7 @@ VignetteBuilder: knitr
 
 - Homo sapiens
 - Mus musculus
+- Rattus norvegicus
 
 ## 📦 Installation
 

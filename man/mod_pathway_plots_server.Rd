@@ -4,7 +4,13 @@
 \alias{mod_pathway_plots_server}
 \title{Pathway Plots Server (heatmap / tree / upset)}
 \usage{
-mod_pathway_plots_server(id, pathway_result_rv, geneList_rv, de_sel = NULL)
+mod_pathway_plots_server(
+  id,
+  pathway_result_rv,
+  geneList_rv,
+  de_sel = NULL,
+  cmp = NULL
+)
 }
 \arguments{
 \item{id}{module id (must match mod_pathway_plots_ui)}
@@ -13,7 +19,9 @@ mod_pathway_plots_server(id, pathway_result_rv, geneList_rv, de_sel = NULL)
 
 \item{geneList_rv}{reactiveVal with a named numeric vector of log2FC (ENTREZID names)}
 
-\item{de_sel}{list returned by mod_de_server() with ref_level()/test_level() (optional; for filenames)}
+\item{de_sel}{optional list returned by mod_de_server() with ref_level()/test_level() for filenames}
+
+\item{cmp}{optional comparison bridge from make_cmp_bridge(); if provided, used for filenames}
 }
 \description{
 Consumes an enrichment result (from Pathway Analysis) and ranked gene vector,

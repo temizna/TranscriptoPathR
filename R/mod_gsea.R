@@ -7,15 +7,16 @@
 #' @param id module id (must match mod_gsea_tab_ui)
 #' @param filtered_data_rv reactiveValues list containing at least $species
 #' @param res_reactive reactiveVal containing DE results (data.frame)
-#' @param de_sel (optional) list returned by mod_de_server(), providing ref/test levels for filenames
+#' @param de_sel optional list returned by mod_de_server(), used for filenames if cmp is NULL
+#' @param cmp optional comparison bridge from make_cmp_bridge(), used for filenames if present
+#'
 #' @import clusterProfiler msigdbr enrichplot
-#' @importFrom utils head write.csv
-#' @importFrom stats as.formula dist model.matrix prcomp quantile relevel var
+#' @importFrom DT renderDT datatable
+#' @importFrom utils write.csv
 #' @importFrom grDevices dev.off pdf
-#' @importFrom grid gpar
-#' @importFrom shiny req renderPlot showNotification downloadHandler
+#' @importFrom shiny req renderPlot showNotification downloadHandler updateSelectInput moduleServer
 #' @export
-mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
+mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL, cmp = NULL) {
   moduleServer(id, function(input, output, session) {
     
     observeEvent(input$run_gsea, {
@@ -34,12 +35,12 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
       res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), , drop = FALSE]
       res$gene <- rownames(res)
       
-      # ID handling (SYMBOL vs ENSEMBL); use your app helpers
+      # ID handling (SYMBOL vs ENSEMBL)
       if (!is_symbol(rownames(res))) {
         conv <- convert_ensembl_to_symbol(rownames(res), filtered_data_rv$species)
-        valid_idx <- !is.na(conv)
-        res <- res[valid_idx, , drop = FALSE]
-        res$gene <- conv[valid_idx]
+        keep <- !is.na(conv)
+        res  <- res[keep, , drop = FALSE]
+        res$gene <- conv[keep]
       } else {
         res$gene <- rownames(res)
       }
@@ -98,20 +99,24 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
       )
       
       m_df <- msigdbr::msigdbr(
-        species = species_name,
-        collection = db_collection,
+        species     = species_name,
+        collection  = db_collection,
         subcollection = db_subcollection
       )
+      if (is.null(m_df) || nrow(m_df) == 0) {
+        shiny::showNotification("No gene sets returned from msigdbr for this selection.", type = "warning")
+        return()
+      }
       term2gene <- m_df[, c("gs_name", "gene_symbol")]
       colnames(term2gene) <- c("ID", "gene")
       
       # Run GSEA
       gsea_result <- tryCatch({
         clusterProfiler::GSEA(
-          geneList = geneList,
-          TERM2GENE = term2gene,
+          geneList     = geneList,
+          TERM2GENE    = term2gene,
           pvalueCutoff = input$gsea_pvalue,
-          verbose = FALSE
+          verbose      = FALSE
         )
       }, error = function(e) {
         shiny::showNotification(paste("GSEA failed:", e$message), type = "error")
@@ -123,7 +128,12 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
         return()
       }
       
-      updateSelectInput(session, "gsea_selected_pathway", choices = gsea_result@result$ID)
+      shiny::updateSelectInput(session, "gsea_selected_pathway", choices = gsea_result@result$ID)
+      
+      # Determine filename tag from cmp (preferred) or de_sel fallback
+      tag <- tryCatch({
+        if (!is.null(cmp)) cmp$tag() else .contrast_tag_from(de_sel)
+      }, error = function(e) .contrast_tag_from(de_sel))
       
       # Dot plot (screen)
       output$gseaDotPlot <- shiny::renderPlot({
@@ -159,10 +169,10 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
           }
         }
       })
-      tag <- .contrast_tag_from(de_sel)
+      
       # Dot plot (PDF)
       output$download_gsea_dot_plot <- shiny::downloadHandler(
-        filename = function() paste0("GSEA_", input$gsea_db,  "_", tag, "_dot_plot.pdf"),
+        filename = function() paste0("GSEA_", input$gsea_db, "_", tag, "_dot_plot.pdf"),
         content  = function(file) {
           grDevices::pdf(file)
           print(enrichplot::dotplot(gsea_result, showCategory = input$gsea_top_n,
@@ -182,7 +192,7 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
       })
       output$download_gsea_enrichment_plot <- shiny::downloadHandler(
         filename = function() paste0("gsea_enrichment_plot_",
-                                     gsub("\\W+", "_", input$gsea_selected_pathway), "_", tag,  ".pdf"),
+                                     gsub("\\W+", "_", input$gsea_selected_pathway), "_", tag, ".pdf"),
         content  = function(file) {
           grDevices::pdf(file, width = 8, height = 6)
           print(enrichplot::gseaplot2(gsea_result, geneSetID = input$gsea_selected_pathway))
@@ -196,7 +206,7 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
           ggplot2::theme(axis.text.y = ggplot2::element_text(size = 6, face = "bold"))
       })
       output$download_gsea_upset_plot <- shiny::downloadHandler(
-        filename = function() paste0("GSEA_", input$gsea_db, "_", tag,  "_upset_plot.pdf"),
+        filename = function() paste0("GSEA_", input$gsea_db, "_", tag, "_upset_plot.pdf"),
         content  = function(file) {
           grDevices::pdf(file)
           print(enrichplot::upsetplot(gsea_result) +
@@ -210,7 +220,7 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL) {
         DT::datatable(as.data.frame(gsea_result), options = list(scrollX = TRUE))
       })
       output$download_gsea_table <- shiny::downloadHandler(
-        filename = function() paste0("GSEA_", input$gsea_db, "_", tag,  "_result.csv"),
+        filename = function() paste0("GSEA_", input$gsea_db, "_", tag, "_result.csv"),
         content  = function(file) utils::write.csv(as.data.frame(gsea_result), file, row.names = FALSE)
       )
     })

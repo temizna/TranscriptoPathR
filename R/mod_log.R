@@ -7,7 +7,7 @@
 #' @param id Shiny module id
 #' @param input_all The full Shiny input object (pass the top-level `input`)
 #' @return reactiveVal character() with log entries
-#' @importFrom shiny moduleServer reactiveVal observeEvent renderText NS
+#' @importFrom shiny moduleServer reactiveVal observeEvent renderText NS downloadHandler
 #' @export
 mod_logger_server <- function(id, input_all) {
   moduleServer(id, function(input, output, session) {
@@ -53,6 +53,22 @@ mod_logger_server <- function(id, input_all) {
     })
     
     # -----------------------
+    # Comparison Builder (module id: cmp)
+    # -----------------------
+    observeEvent(input_all[["cmp-apply"]], {
+      mode <- input_all[["cmp-mode"]]
+      base_params <- c("cmp-group_var","cmp-mode","cmp-covariates")
+      extra <- switch(
+        mode,
+        "simple" = c("cmp-level_test","cmp-level_ref"),
+        "pooled" = c("cmp-levels_test","cmp-levels_ref","cmp-keep_levels_only"),
+        "paired" = c("cmp-subject_col","cmp-level_test","cmp-level_ref"),
+        character(0)
+      )
+      append_log("Clicked cmp-apply", c(base_params, extra))
+    })
+    
+    # -----------------------
     # Differential Expression (module id: de)
     # -----------------------
     observeEvent(input_all[["de-run_de"]], {
@@ -61,7 +77,7 @@ mod_logger_server <- function(id, input_all) {
         "de-lfc_threshold", "de-padj_threshold", "de-num_genes", "de-cluster_columns"
       ))
     })
-    # Back-compat if still non-modular:
+    # Back-compat:
     observeEvent(input_all$run_de, {
       append_log("Clicked run_de (global)", c(
         "metadata_column","reference_condition","test_condition",
@@ -80,6 +96,12 @@ mod_logger_server <- function(id, input_all) {
         "cross-crossplot_gene_count","cross-crossplot_topgenes","cross-cross_enrich_method"
       ))
     })
+    # Cross downloads
+    observeEvent(input_all[["cross-download_cross_plot"]],                 { append_log("Clicked cross-download_cross_plot") })
+    observeEvent(input_all[["cross-download_cross_venn_plot"]],            { append_log("Clicked cross-download_cross_venn_plot") })
+    observeEvent(input_all[["cross-download_overlap_genes"]],              { append_log("Clicked cross-download_overlap_genes") })
+    observeEvent(input_all[["cross-download_cross_category_heatmap"]],     { append_log("Clicked cross-download_cross_category_heatmap") })
+    observeEvent(input_all[["cross-download_cross_pathway_plot"]],         { append_log("Clicked cross-download_cross_pathway_plot") })
     # Back-compat:
     observeEvent(input_all$run_crossplot, {
       append_log("Clicked run_crossplot (global)", c(
@@ -91,6 +113,26 @@ mod_logger_server <- function(id, input_all) {
     })
     
     # -----------------------
+    # Volcano (global)
+    # -----------------------
+    observeEvent(input_all$download_volcano_plot, { append_log("Clicked download_volcano_plot") })
+    observeEvent(input_all$download_ma_plot,      { append_log("Clicked download_ma_plot") })
+    
+    # -----------------------
+    # Quality Check (global)
+    # -----------------------
+    observeEvent(input_all$download_qc_plot, {
+      append_log("Clicked download_qc_plot", c("qc_plot_type","group_select_qc","show_labels","qc_plot_filename"))
+    })
+    
+    # -----------------------
+    # Genes of Interest Heatmap (global)
+    # -----------------------
+    observeEvent(input_all$download_goi_heatmap, {
+      append_log("Clicked download_goi_heatmap", c("goi_group_column","cluster_columns","goi_file"))
+    })
+    
+    # -----------------------
     # GSEA (module id: gsea)
     # -----------------------
     observeEvent(input_all[["gsea-run_gsea"]], {
@@ -99,6 +141,10 @@ mod_logger_server <- function(id, input_all) {
         "gsea-gsea_top_n","gsea-lfc_threshold","gsea-padj_threshold","gsea-gsea_pvalue"
       ))
     })
+    observeEvent(input_all[["gsea-download_gsea_dot_plot"]],         { append_log("Clicked gsea-download_gsea_dot_plot") })
+    observeEvent(input_all[["gsea-download_gsea_enrichment_plot"]],  { append_log("Clicked gsea-download_gsea_enrichment_plot") })
+    observeEvent(input_all[["gsea-download_gsea_upset_plot"]],       { append_log("Clicked gsea-download_gsea_upset_plot") })
+    observeEvent(input_all[["gsea-download_gsea_table"]],            { append_log("Clicked gsea-download_gsea_table") })
     # Back-compat:
     observeEvent(input_all$run_gsea, {
       append_log("Clicked run_gsea (global)", c(
@@ -113,18 +159,15 @@ mod_logger_server <- function(id, input_all) {
     observeEvent(input_all[["gsva-run"]], {
       append_log("Clicked gsva-run", c(
         "gsva-gset_source","gsva-gsva_db","gsva-gsva_method","gsva-mx_opt",
-        "gsva-min_gs_size","gsva-max_gs_size",
-        "gsva-use_de_defaults",
-        # if user overrides DE selections:
+        "gsva-min_gs_size","gsva-max_gs_size","gsva-use_de_defaults",
         "gsva-gsva_metadata_column","gsva-gsva_reference_condition","gsva-gsva_test_condition"
       ))
     })
-    # Optional: log GSVA downloads
-    observeEvent(input_all[["gsva-dl_table"]],   { append_log("Clicked gsva-dl_table") })
-    observeEvent(input_all[["gsva-dl_scores"]],  { append_log("Clicked gsva-dl_scores") })
-    observeEvent(input_all[["gsva-dl_volcano"]], { append_log("Clicked gsva-dl_volcano") })
-    observeEvent(input_all[["gsva-dl_heatmap"]], { append_log("Clicked gsva-dl_heatmap") })
-    observeEvent(input_all[["gsva-dl_boxplots"]],{ append_log("Clicked gsva-dl_boxplots") })
+    observeEvent(input_all[["gsva-dl_table"]],    { append_log("Clicked gsva-dl_table") })
+    observeEvent(input_all[["gsva-dl_scores"]],   { append_log("Clicked gsva-dl_scores") })
+    observeEvent(input_all[["gsva-dl_volcano"]],  { append_log("Clicked gsva-dl_volcano") })
+    observeEvent(input_all[["gsva-dl_heatmap"]],  { append_log("Clicked gsva-dl_heatmap") })
+    observeEvent(input_all[["gsva-dl_boxplots"]], { append_log("Clicked gsva-dl_boxplots") })
     
     # -----------------------
     # Pathway Analysis (module id: pathway)
@@ -135,6 +178,11 @@ mod_logger_server <- function(id, input_all) {
         "pathway-lfc_threshold","pathway-padj_threshold","pathway-pathway.qval","pathway-max_genes"
       ))
     })
+    observeEvent(input_all[["pathway-download_dot_plot"]],        { append_log("Clicked pathway-download_dot_plot") })
+    observeEvent(input_all[["pathway-download_emap_plot"]],       { append_log("Clicked pathway-download_emap_plot") })
+    observeEvent(input_all[["pathway-download_cnet_plot"]],       { append_log("Clicked pathway-download_cnet_plot") })
+    observeEvent(input_all[["pathway-download_circular_plot"]],   { append_log("Clicked pathway-download_circular_plot") })
+    observeEvent(input_all[["pathway-download_pathway_table"]],   { append_log("Clicked pathway-download_pathway_table") })
     # Back-compat:
     observeEvent(input_all$run_pathway, {
       append_log("Clicked run_pathway (global)", c(
@@ -144,67 +192,80 @@ mod_logger_server <- function(id, input_all) {
     })
     
     # -----------------------
-    # Pathway Plots (module id: pathplots) - downloads only
+    # Pathway Plots (module id: pathplots) downloads
     # -----------------------
-    observeEvent(input_all[["pathplots-download_pathheatmap_plot"]], {
-      append_log("Clicked pathplots-download_pathheatmap_plot")
-    })
-    observeEvent(input_all[["pathplots-download_tree_plot"]], {
-      append_log("Clicked pathplots-download_tree_plot")
-    })
-    observeEvent(input_all[["pathplots-download_upset_plot"]], {
-      append_log("Clicked pathplots-download_upset_plot")
-    })
+    observeEvent(input_all[["pathplots-download_pathheatmap_plot"]], { append_log("Clicked pathplots-download_pathheatmap_plot") })
+    observeEvent(input_all[["pathplots-download_tree_plot"]],        { append_log("Clicked pathplots-download_tree_plot") })
+    observeEvent(input_all[["pathplots-download_upset_plot"]],       { append_log("Clicked pathplots-download_upset_plot") })
     # Back-compat:
     observeEvent(input_all$download_pathheatmap_plot, { append_log("Clicked download_pathheatmap_plot (global)") })
     observeEvent(input_all$download_tree_plot,        { append_log("Clicked download_tree_plot (global)") })
     observeEvent(input_all$download_upset_plot,       { append_log("Clicked download_upset_plot (global)") })
     
     # -----------------------
-    # 
+    # Non-overlap Pathway (module id: nonOL)
     # -----------------------
-    # Non-overlap Pathway (namespaced)
     observeEvent(input_all[["nonOL-run_non_overlap_pathway"]], {
-      timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-      params <- c("nonOL-pathway_db_nonOL", "nonOL-padj_threshold_nonOL", "nonOL-pathway_qval_nonOL", "nonOL-showCategory_nonOL")
-      entry <- paste0("[", timestamp, "] User clicked nonOL-run_non_overlap_pathway\nParameters: ",
-                      paste(sapply(params, function(pn) paste0(pn, ": ", as.character(input_all[[pn]]))), collapse="; "))
-      user_log(c(user_log(), entry))
+      append_log("Clicked nonOL-run_non_overlap_pathway", c(
+        "nonOL-pathway_db_nonOL","nonOL-padj_threshold_nonOL",
+        "nonOL-pathway_qval_nonOL","nonOL-showCategory_nonOL"
+      ))
     }, ignoreInit = TRUE)
-    
+    observeEvent(input_all[["nonOL-download_nonOL_dot_plot"]],       { append_log("Clicked nonOL-download_nonOL_dot_plot") })
+    observeEvent(input_all[["nonOL-download_nonOL_heatmap_plot"]],   { append_log("Clicked nonOL-download_nonOL_heatmap_plot") })
+    observeEvent(input_all[["nonOL-download_nonOL_tree_plot"]],      { append_log("Clicked nonOL-download_nonOL_tree_plot") })
+    observeEvent(input_all[["nonOL-download_pathway_nonOL_table"]],  { append_log("Clicked nonOL-download_pathway_nonOL_table") })
     
     # -----------------------
-    # TF Enrichment (namespaced)
+    # TF Enrichment (module id: tf)
     # -----------------------
     observeEvent(input_all[["tf-run_tf_enrichment"]], {
-      timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-      params <- c("tf-tf_data_source","tf-enrichment_method","tf-gene_direction",
-                  "tf-lfc_threshold","tf-padj_threshold","tf-tf.qval")
-      entry <- paste0("[", timestamp, "] User clicked tf-run_tf_enrichment\nParameters: ",
-                      paste(sapply(params, function(pn) paste0(pn, ": ", as.character(input_all[[pn]]))), collapse="; "))
-      user_log(c(user_log(), entry))
+      append_log("Clicked tf-run_tf_enrichment", c(
+        "tf-tf_data_source","tf-enrichment_method","tf-gene_direction",
+        "tf-lfc_threshold","tf-padj_threshold","tf-tf.qval"
+      ))
     })
-    
+    observeEvent(input_all[["tf-download_tf_dotplot"]],        { append_log("Clicked tf-download_tf_dotplot") })
+    observeEvent(input_all[["tf-download_tf_ridgeplot"]],      { append_log("Clicked tf-download_tf_ridgeplot") })
+    observeEvent(input_all[["tf-download_tf_results_table"]],  { append_log("Clicked tf-download_tf_results_table") })
     
     # -----------------------
-    # PCA Cluster (global)
+    # PCA Cluster (module id: pca)
     # -----------------------
+    observeEvent(input_all[["pca-run_pca"]], {
+      append_log("Clicked pca-run_pca", c(
+        "pca-max_pc","pca-variance_threshold","pca-percent_of_data",
+        "pca-similarity_threshold","pca-max_genes","pca-min_genes","pca-pca_enrich_method"
+      ))
+    })
+    observeEvent(input_all[["pca-download_pca_loadings"]],               { append_log("Clicked pca-download_pca_loadings") })
+    observeEvent(input_all[["pca-download_pca_enrichment"]],             { append_log("Clicked pca-download_pca_enrichment") })
+    observeEvent(input_all[["pca-download_reconstructed_heatmap"]],      { append_log("Clicked pca-download_reconstructed_heatmap") })
+    observeEvent(input_all[["pca-download_sample_correlation_heatmap"]], { append_log("Clicked pca-download_sample_correlation_heatmap") })
+    observeEvent(input_all[["pca-download_pca_loadings_table"]],         { append_log("Clicked pca-download_pca_loadings_table") })
+    observeEvent(input_all[["pca-download_pca_enrichment_table"]],       { append_log("Clicked pca-download_pca_enrichment_table") })
+    # Legacy global PCA
     observeEvent(input_all$run_pca, {
-      append_log("Clicked run_pca", c(
+      append_log("Clicked run_pca (global)", c(
         "max_pc","variance_threshold","percent_of_data",
         "similarity_threshold","max_genes","min_genes","pca_enrich_method"
       ))
     })
     
-    # Outputs
-    output$log_text <- renderText({ paste(user_log(), collapse = "\n\n") })
+    # -----------------------
+    # Cancer Gene Census (global)
+    # -----------------------
+    observeEvent(input_all$run_cancer_gene_census, { append_log("Clicked run_cancer_gene_census") })
+    observeEvent(input_all$download_cancer_gene_table, { append_log("Clicked download_cancer_gene_table") })
+    observeEvent(input_all$download_cgc_venn_plot,     { append_log("Clicked download_cgc_venn_plot") })
     
+    # Output and persistence
+    output$log_text <- renderText({ paste(user_log(), collapse = "\n\n") })
     output$download_log <- downloadHandler(
       filename = function() paste0("user_session_log_", Sys.Date(), ".txt"),
       content  = function(file) writeLines(user_log(), con = file)
     )
     
-    # Save on session end unless running R CMD check
     session$onSessionEnded(function() {
       if (nzchar(Sys.getenv("_R_CHECK_PACKAGE_NAME_"))) return(invisible(NULL))
       log_dir <- file.path(getwd(), "logs")
@@ -217,7 +278,6 @@ mod_logger_server <- function(id, input_all) {
     return(user_log)
   })
 }
-
 
 # =========================
 # Logger Module - UI

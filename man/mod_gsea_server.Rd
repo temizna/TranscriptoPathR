@@ -4,7 +4,7 @@
 \alias{mod_gsea_server}
 \title{GSEA Module (server)}
 \usage{
-mod_gsea_server(id, filtered_data_rv, res_reactive, de_sel = NULL)
+mod_gsea_server(id, filtered_data_rv, res_reactive, de_sel = NULL, cmp = NULL)
 }
 \arguments{
 \item{id}{module id (must match mod_gsea_tab_ui)}
@@ -13,7 +13,9 @@ mod_gsea_server(id, filtered_data_rv, res_reactive, de_sel = NULL)
 
 \item{res_reactive}{reactiveVal containing DE results (data.frame)}
 
-\item{de_sel}{(optional) list returned by mod_de_server(), providing ref/test levels for filenames}
+\item{de_sel}{optional list returned by mod_de_server(), used for filenames if cmp is NULL}
+
+\item{cmp}{optional comparison bridge from make_cmp_bridge(), used for filenames if present}
 }
 \description{
 Runs Gene Set Enrichment Analysis (GSEA) using clusterProfiler and msigdbr,

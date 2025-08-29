@@ -2,10 +2,22 @@
 % Please edit documentation in R/run_app.R
 \name{run_app}
 \alias{run_app}
-\title{Run the Shiny RNA-seq App}
+\title{Launch the TranscriptoPathR Shiny app}
 \usage{
-run_app()
+run_app(..., width = 1440, height = 900, app_mode = TRUE)
+}
+\arguments{
+\item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}}
+
+\item{width}{Browser window width (for chrome app-mode launcher). Default 1440.}
+
+\item{height}{Browser window height (for chrome app-mode launcher). Default 900.}
+
+\item{app_mode}{If TRUE, launch Chrome in app-mode (chromeless window). Default TRUE.}
+}
+\value{
+Runs the app; returns whatever \code{\link[shiny:runApp]{shiny::runApp()}} returns.
 }
 \description{
-Run the Shiny RNA-seq App
+Launch the TranscriptoPathR Shiny app
 }

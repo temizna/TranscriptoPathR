@@ -92,7 +92,7 @@ mod_gsva_ui <- function(id) {
 #' @importFrom limma lmFit makeContrasts contrasts.fit eBayes topTable
 #' @importFrom DT renderDT datatable
 #' @importFrom ggplot2 ggplot aes geom_point scale_color_manual labs theme_minimal geom_boxplot facet_wrap
-#' @importFrom ComplexHeatmap Heatmap HeatmapAnnotation draw Legend packLegend
+#' @importFrom ComplexHeatmap Heatmap HeatmapAnnotation draw
 #' @importFrom circlize colorRamp2
 #' @importFrom grid grid.newpage grid.text
 #' @importFrom tibble rownames_to_column
@@ -110,7 +110,6 @@ mod_gsva_server <- function(
     id,
     dds_rv,
     filtered_data_rv,
-    de_sel = NULL,
     group_var_react = NULL,
     ref_level_react = NULL,
     test_level_react = NULL
@@ -224,7 +223,7 @@ mod_gsva_server <- function(
         type = "warning"
       )
       
-      # 4) GSVA / ssGSEA - support legacy GSVA (e.g., 2.2) and newer param API
+      # 4) GSVA / ssGSEA - support legacy GSVA and newer Param API
       gsva_ns   <- asNamespace("GSVA")
       gsva_fun  <- get("gsva", gsva_ns)
       exports   <- getNamespaceExports("GSVA")
@@ -232,7 +231,6 @@ mod_gsva_server <- function(
       
       minSize <- input$min_gs_size; maxSize <- input$max_gs_size
       if (has_param_api) {
-        # Newer API (Param objects)
         if (identical(input$gsva_method, "gsva")) {
           param <- GSVA::gsvaParam(
             exprData = expr,
@@ -254,7 +252,6 @@ mod_gsva_server <- function(
         }
         gsva_mat <- GSVA::gsva(param, BPPARAM = BiocParallel::SerialParam())
       } else {
-        # Legacy API (GSVA <= ~2.40; your v2.2 definitely here)
         formals_gsva <- names(formals(gsva_fun))
         gsva_args <- list(
           expr          = expr,
@@ -282,13 +279,11 @@ mod_gsva_server <- function(
       # Keep display labels, but use syntactic labels in design/contrasts
       lvl_disp <- levels(group_orig)
       lvl_safe <- make.names(lvl_disp)
-      # re-map to safe labels
       group_safe <- factor(group_orig, levels = lvl_disp, labels = lvl_safe)
       
       design <- stats::model.matrix(~ 0 + group_safe)
       colnames(design) <- lvl_safe
       
-      # map ref/test to safe
       refL  <- lvl_safe[match(refL0,  lvl_disp)]
       testL <- lvl_safe[match(testL0, lvl_disp)]
       
@@ -342,12 +337,11 @@ mod_gsva_server <- function(
         for (cn in ann_cols) {
           v <- meta[[cn]]
           if (is.null(v)) next
-          # Decide discrete vs continuous
           if (is.numeric(v)) {
             rng <- stats::quantile(v, probs = c(0.02, 0.98), na.rm = TRUE)
-            rng <- if (any(is.na(rng)) || diff(rng) == 0) range(v, na.rm = TRUE) else rng
+            if (any(is.na(rng)) || diff(rng) == 0) rng <- range(v, na.rm = TRUE)
             col_list[[cn]] <- circlize::colorRamp2(
-              c(rng[1], mean(rng), rng[2]),
+              c(rng[1], mean(rng, na.rm = TRUE), rng[2]),
               c("#08306b", "#f7f7f7", "#7f0000")
             )
             df[[cn]] <- v
@@ -367,7 +361,7 @@ mod_gsva_server <- function(
         df = df,
         col = col_list,
         annotation_name_side = "left",
-        annotation_legend_param = list(nrow = 2)  # keep legends compact; moved to bottom in draw()
+        annotation_legend_param = list(nrow = 2)
       )
     }
     
@@ -405,7 +399,7 @@ mod_gsva_server <- function(
           cluster_columns = TRUE
         ),
         heatmap_legend_side = "right",
-        annotation_legend_side = "bottom"  # move annotation legend away to prevent overlap
+        annotation_legend_side = "bottom"
       )
     })
     
@@ -463,7 +457,7 @@ mod_gsva_server <- function(
         topN <- head(tt$Pathway, 50)
         sub  <- gsva_mat[intersect(rownames(gsva_mat), topN), , drop = FALSE]
         
-        grDevices::pdf(file, width = 8.5, height = 11)  # portrait
+        grDevices::pdf(file, width = 8.5, height = 11)
         if (nrow(sub) < 2) {
           grid::grid.newpage(); grid::grid.text("No pathways available for heatmap.")
           grDevices::dev.off(); return()

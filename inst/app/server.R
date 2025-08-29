@@ -35,34 +35,42 @@ de_sel <- mod_de_server(
   res_reactive     = res_reactive
 )
 
+cmp_sel <- mod_easy_compare_server("cmp", filtered_data_rv)
+
+cmp <- make_cmp_bridge(de_sel)
 mod_gsva_server(
   id = "gsva",
   dds_rv = dds_rv,
-  de_sel = de_sel,
   filtered_data_rv = filtered_data_rv,
-  group_var_react  = de_sel$group_var,
-  ref_level_react  = de_sel$ref_level,
-  test_level_react = de_sel$test_level
+  group_var_react  = cmp$group_var,
+  ref_level_react  = cmp$ref_level,
+  test_level_react = cmp$test_level
 )
 
 mod_volcano_ma_plot(input, output, session, res_reactive, filtered_data_rv)
 mod_cross_server("cross", filtered_data_rv = filtered_data_rv, filtered_dds_rv = filtered_dds_rv)
 mod_pathway_server(
   id = "pathway",
-  filtered_data_rv     = filtered_data_rv,
-  res_reactive         = res_reactive,
-  geneList_rv          = geneList_rv,
-  kegg_pathway_results = kegg_pathway_results,
-  d1_merged_rv         = d1_merged_rv,
+  filtered_data_rv = filtered_data_rv,
+  res_reactive = res_reactive,
+  geneList_rv = geneList_rv,
+  d1_merged_rv = d1_merged_rv,
+  pathway_result_rv,
   de_sel = de_sel,
-  pathway_result_rv    = pathway_result_rv
+  cmp = cmp
 )
-mod_gsea_server("gsea", filtered_data_rv, res_reactive,  de_sel = de_sel)
+mod_gsea_server(
+  id = "gsea",
+  filtered_data_rv = filtered_data_rv,
+  res_reactive = res_reactive,
+  de_sel = de_sel,   # optional fallback
+  cmp = cmp          # preferred for filenames
+)
 mod_pathway_plots_server(
   id = "pathplots",
   pathway_result_rv = pathway_result_rv,
   geneList_rv       = geneList_rv,
-  de_sel            = de_sel   # from mod_de_server(...)
+  cmp           = cmp   # from mod_de_server(...)
 )
 
 mod_cancer_gene_census(input, output, session, res_reactive, filtered_data_rv)
@@ -73,10 +81,11 @@ mod_nonoverlap_server(
   geneList_rv        = geneList_rv,        # original ENTREZID-named vector
   geneListU_rv       = geneListU_rv        # will be filled by this module
 )
-mod_tf_enrichment_server("tf", res_reactive = res_reactive, filtered_data_rv = filtered_data_rv)
+mod_tf_enrichment_server("tf", res_reactive = res_reactive, filtered_data_rv = filtered_data_rv, cmp=cmp)
 
 mod_logger_server("logger", input_all = input)
-mod_pca_cluster_server(input, output, session, filtered_data_rv)
+# in app/server.R
+mod_pca_server("pca", filtered_data_rv = filtered_data_rv)
 mod_goi_heatmap(input, output, session, filtered_data_rv)
             # or however you store it
 

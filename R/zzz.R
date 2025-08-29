@@ -1,8 +1,8 @@
 .onLoad <- function(libname, pkgname) {
   bioc_required <- c(
     "DESeq2", "org.Hs.eg.db", "org.Mm.eg.db", "clusterProfiler", 
-    "enrichplot", "GEOquery", "Biobase", 
-    "ComplexHeatmap", "msigdbr", "ReactomePA", "pathfindR"
+    "enrichplot", "Biobase", 
+    "ComplexHeatmap", "msigdbr", "ReactomePA" 
   )
 
   cran_required <- c("ggplot2", "reshape2", "dplyr", "tibble", "stringr", 
@@ -24,5 +24,8 @@ utils::globalVariables(c("Gene_Symbol", "TF_name", "V1", "V2", "br"))
   if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
   install_if_missing(bioc_required, BiocManager::install)
+  if (is.null(getOption("TranscriptoPathR.bs"))) {
+    options(TranscriptoPathR.bs = tpr_theme())
+  }
 }
 

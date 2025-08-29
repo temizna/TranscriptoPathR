@@ -8,7 +8,6 @@ mod_gsva_server(
   id,
   dds_rv,
   filtered_data_rv,
-  de_sel = NULL,
   group_var_react = NULL,
   ref_level_react = NULL,
   test_level_react = NULL
@@ -21,13 +20,13 @@ mod_gsva_server(
 
 \item{filtered_data_rv}{ReactiveValues with at least $species}
 
-\item{de_sel}{(optional) list returned by mod_de_server(), providing ref/test levels for filenames and defaults}
-
 \item{group_var_react}{optional reactive() for DE tab "Variable to test"}
 
 \item{ref_level_react}{optional reactive() for DE tab "Reference Condition"}
 
 \item{test_level_react}{optional reactive() for DE tab "Test Condition"}
+
+\item{de_sel}{(optional) list returned by mod_de_server(), providing ref/test levels for filenames and defaults}
 }
 \description{
 GSVA / ssGSEA module Server
