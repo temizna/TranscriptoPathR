@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 0.9.2
+Version: 1.0.1
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
@@ -95,11 +95,10 @@ VignetteBuilder: knitr
 - **Non-overlap Pathway Analysis**  
   - Genes overlapping in the initial pathway analysis is removed and the same pathway analysis is repeated with this refined geneset.  
   - Visualizations: dot plots, cnet, circular, emap
-
 - **GSEA (Gene Set Enrichment Analysis)**  
   - Supports MSigDB collections: Hallmark, GO, KEGG, Reactome  
   - Dot plots, enrichment plots,  and enrichment tables
-- **GSVA/ssGSVA (single sample Gene Set Variation Analysis)
+- **GSVA/ssGSVA (single sample Gene Set Variation Analysis)**
   - Volcano plots
   - Sample by pathway heatmap
   - Box plots of top pathways 	
