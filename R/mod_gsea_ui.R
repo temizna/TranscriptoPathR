@@ -7,6 +7,9 @@ mod_gsea_tab_ui <- function(id) {
   shiny::tagList(
     sidebarLayout(
       sidebarPanel(
+        shiny::checkboxInput(ns("gsea_use_custom_file"), "Use custom DE results file", value = FALSE),
+        shiny::fileInput(ns("gsea_custom_file"), "Upload your own DE result table (Gene, log2FC, padj) (TSV or CSV)",
+                         accept = c(".txt", ".tsv", ".csv")),
         shiny::checkboxInput(ns("gsea_split_dotplot"), "Split Dot Plot by Activation State", value = TRUE),
         shiny::selectInput(ns("gsea_color_scale"), "Dot Plot Color By:",
                            choices = c("p.adjust", "pvalue", "qvalue", "NES"), selected = "pvalue"),

@@ -18,47 +18,87 @@
 #' @export
 mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL, cmp = NULL) {
   moduleServer(id, function(input, output, session) {
-    
-    observeEvent(input$run_gsea, {
-      shiny::req(
-        res_reactive(),
-        input$gsea_db,
-        input$lfc_threshold,
-        input$padj_threshold,
-        input$gsea_pvalue,
-        filtered_data_rv$species
-      )
-      shiny::showNotification("Starting GSEA Analysis", type = "message")
       
-      # Prepare DE results
-      res <- res_reactive()
-      res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), , drop = FALSE]
-      res$gene <- rownames(res)
-      
-      # ID handling (SYMBOL vs ENSEMBL)
-      if (!is_symbol(rownames(res))) {
-        conv <- convert_ensembl_to_symbol(rownames(res), filtered_data_rv$species)
-        keep <- !is.na(conv)
-        res  <- res[keep, , drop = FALSE]
-        res$gene <- conv[keep]
-      } else {
-        res$gene <- rownames(res)
-      }
-      
-      # Filter and rank vector
-      res <- res[abs(res$log2FoldChange) >= input$lfc_threshold & res$padj <= input$padj_threshold, , drop = FALSE]
-      res <- res[!is.na(res$gene), , drop = FALSE]
-      res$gene <- make.unique(res$gene)
-      
-      geneList <- res$log2FoldChange
-      names(geneList) <- res$gene
-      geneList <- sort(geneList, decreasing = TRUE)
-      geneList <- geneList[!duplicated(names(geneList))]
-      
-      if (length(geneList) < 10) {
-        shiny::showNotification("Too few genes left after filtering or ID conversion for GSEA.", type = "error")
-        return()
-      }
+      observeEvent(input$run_gsea, {
+        shiny::req(
+          input$gsea_db,
+          input$lfc_threshold,
+          input$padj_threshold,
+          input$gsea_pvalue,
+          filtered_data_rv$species
+        )
+        shiny::showNotification("Starting GSEA Analysis", type = "message")
+        
+        use_custom <- isTRUE(input$gsea_use_custom_file)
+        res <- NULL
+        
+        if (use_custom) {
+          file <- input$gsea_custom_file
+          if (is.null(file)) {
+            shiny::showNotification("No file uploaded.", type = "error")
+            return()
+          }
+          
+          ext <- tools::file_ext(file$datapath)
+          res <- tryCatch({
+            if (ext %in% c("csv")) {
+              read.csv(file$datapath, stringsAsFactors = FALSE)
+            } else {
+              read.delim(file$datapath, stringsAsFactors = FALSE)
+            }
+          }, error = function(e) {
+            shiny::showNotification(paste("File read failed:", e$message), type = "error")
+            return(NULL)
+          })
+          
+          if (is.null(res)) return()
+          
+          required_cols <- c("gene", "log2FoldChange", "padj")
+          if (!all(required_cols %in% colnames(res))) {
+            shiny::showNotification("Uploaded file must contain 'gene', 'log2FoldChange', and 'padj' columns.", type = "error")
+            return()
+          }
+          
+          res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), ]
+          res$gene <- make.unique(as.character(res$gene))
+          rownames(res) <- res$gene
+          
+          shiny::showNotification("Using custom DE results", type = "message")
+          
+        } else {
+          res <- res_reactive()
+          shiny::req(res)
+          shiny::showNotification("Using default DESeq2 results", type = "message")
+        }
+        
+        req(res)
+        res <- res[!is.na(res$log2FoldChange) & !is.na(res$padj), , drop = FALSE]
+        
+        if (!"gene" %in% colnames(res)) {
+          res$gene <- rownames(res)
+        }
+        
+        # ID handling
+        if (!is_symbol(res$gene)) {
+          conv <- convert_ensembl_to_symbol(res$gene, filtered_data_rv$species)
+          keep <- !is.na(conv)
+          res <- res[keep, , drop = FALSE]
+          res$gene <- conv[keep]
+        }
+        
+        res$gene <- make.unique(res$gene)
+        res <- res[abs(res$log2FoldChange) >= input$lfc_threshold & res$padj <= input$padj_threshold, ]
+        res <- res[!duplicated(res$gene), ]
+        
+        geneList <- res$log2FoldChange
+        names(geneList) <- res$gene
+        geneList <- sort(geneList, decreasing = TRUE)
+        
+        if (length(geneList) < 10) {
+          shiny::showNotification("Too few genes for GSEA after filtering.", type = "error")
+          return()
+        }
+        
       
       # Species mapping for msigdbr
       species_map <- list(

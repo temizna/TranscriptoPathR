@@ -92,12 +92,14 @@ VignetteBuilder: knitr
   - Visualizations: dot plots, cnet, circular, emap  
   - KEGG pathway rendering with `pathfindR` + gene heatmaps
   - Pathway results can be downloaded as tables.
+  - Load your own differential expression data as csv or txt file with gene, log2FoldChange and padj header to perform pathway analysis
 - **Non-overlap Pathway Analysis**  
   - Genes overlapping in the initial pathway analysis is removed and the same pathway analysis is repeated with this refined geneset.  
   - Visualizations: dot plots, cnet, circular, emap
 - **GSEA (Gene Set Enrichment Analysis)**  
   - Supports MSigDB collections: Hallmark, GO, KEGG, Reactome  
   - Dot plots, enrichment plots,  and enrichment tables
+  - Load your own 3 column differential expression data as csv or txt file with gene, log2FoldChange and padj header to perform GSEA
 - **GSVA/ssGSVA (single sample Gene Set Variation Analysis)**
   - Volcano plots
   - Sample by pathway heatmap
