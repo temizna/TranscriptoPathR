@@ -52,16 +52,16 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
       
       if (identical(input$mode, "simple")) {
         shiny::tagList(
-          shiny::selectInput(ns("level_test"), "Test group", choices = lv,
-                             selected = if (length(lv)) lv[1] else NULL),
           shiny::selectInput(ns("level_ref"), "Reference group", choices = lv,
+                             selected = if (length(lv)) lv[1] else NULL),
+          shiny::selectInput(ns("level_test"), "Test group", choices = lv,
                              selected = if (length(lv) >= 2) lv[2] else if (length(lv)) lv[1] else NULL)
         )
       } else if (identical(input$mode, "pooled")) {
         shiny::tagList(
-          shiny::selectInput(ns("levels_test"), "Test group levels (one or more)",
-                             choices = lv, multiple = TRUE),
           shiny::selectInput(ns("levels_ref"), "Reference group levels (one or more)",
+                             choices = lv, multiple = TRUE),
+          shiny::selectInput(ns("levels_test"), "Test group levels (one or more)",
                              choices = lv, multiple = TRUE),
           shiny::helpText("Optional: restrict to only the selected levels below."),
           shiny::selectInput(ns("keep_levels_only"), "Keep only selected levels",
@@ -73,10 +73,10 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
         shiny::tagList(
           shiny::selectInput(ns("subject_col"), "Subject ID column",
                              choices = cols, selected = subj_default),
-          shiny::selectInput(ns("level_test"), "Test group", choices = lv,
-                             selected = if (length(lv)) lv[1] else NULL),
           shiny::selectInput(ns("level_ref"), "Reference group", choices = lv,
-                             selected = if (length(lv) >= 2) lv[2] else if (length(lv)) lv[1] else NULL)
+                             selected = if (length(lv) >= 2) lv[2] else if (length(lv)) lv[1] else NULL),
+          shiny::selectInput(ns("level_test"), "Test group", choices = lv,
+                             selected = if (length(lv)) lv[1] else NULL)
         )
       }
     })

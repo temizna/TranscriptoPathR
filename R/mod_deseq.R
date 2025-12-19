@@ -173,6 +173,7 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         counts_sub  <- filtered_data_rv$counts[, ids, drop = FALSE]
         coldata_sub <- filtered_data_rv$samples[ids, , drop = FALSE]
         coldata_sub$cmp_group <- factor(as.character(cf), levels = c("Reference", "Test"))
+      
         
         dds <- DESeq2::DESeqDataSetFromMatrix(
           countData = counts_sub,
