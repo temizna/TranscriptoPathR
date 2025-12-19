@@ -28,14 +28,15 @@ callModule(mod_sample_select_dynamic, "sample_select",
            filtered_dds_rv = filtered_dds_rv)
 mod_gene_expression_plot(input, output, session,filtered_data_rv)
 mod_qc_plot(input, output, session, filtered_data_rv)
+
+cmp_sel <- mod_easy_compare_server("cmp", filtered_data_rv)
 de_sel <- mod_de_server(
   id = "de",
   filtered_data_rv = filtered_data_rv,
   filtered_dds_rv  = filtered_dds_rv,
-  res_reactive     = res_reactive
+  res_reactive     = res_reactive,
+  cmp              = cmp_sel 
 )
-
-cmp_sel <- mod_easy_compare_server("cmp", filtered_data_rv)
 
 cmp <- make_cmp_bridge(de_sel)
 mod_gsva_server(
