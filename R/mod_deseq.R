@@ -172,8 +172,29 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         }
         counts_sub  <- filtered_data_rv$counts[, ids, drop = FALSE]
         coldata_sub <- filtered_data_rv$samples[ids, , drop = FALSE]
-        coldata_sub$cmp_group <- factor(as.character(cf), levels = c("Reference", "Test"))
-      
+        role_vec <- as.character(cf)
+        names(role_vec) <- ids  # just in case not already named
+        coldata_sub$cmp_group <- factor(role_vec[rownames(coldata_sub)], levels = c("Reference", "Test"))
+        
+        message("=== DEBUG: cmp_group column ===")
+        print(table(coldata_sub$cmp_group))
+        print(head(coldata_sub[, c("cmp_group")], 10))
+        message("=== DEBUG: cmp_factor() ===")
+        print(head(cmp$cmp_factor()))
+        print(table(cmp$cmp_factor()))
+        ids <- cmp$included_samples()
+        cf <- cmp$cmp_factor()
+        stopifnot(all(ids %in% colnames(filtered_data_rv$counts)))  # critical
+        stopifnot(length(ids) == length(cf))  # required
+        
+        # Check matching
+        role_df <- data.frame(
+          sample = ids,
+          role = as.character(cf),
+          true_group = filtered_data_rv$samples[ids, input$group_var]
+        )
+        print(head(role_df))
+        
         
         dds <- DESeq2::DESeqDataSetFromMatrix(
           countData = counts_sub,
