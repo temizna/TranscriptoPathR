@@ -205,6 +205,11 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
       }, striped = TRUE, bordered = TRUE, spacing = "xs")
       
       shiny::showNotification("Comparison ready. Downstream modules can now use it.", type = "message")
+      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "metadata_column", selected = "cmp_group")
+      
+      # Optional: print debug info
+      message("Comparison builder applied — metadata_column forcibly set to 'cmp_group'")
+      
     })
     
     # ---- Public API ---------------------------------------------------------

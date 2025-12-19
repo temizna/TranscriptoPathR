@@ -82,15 +82,24 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
     shiny::observe({
       shiny::req(filtered_data_rv$samples)
       cols <- colnames(filtered_data_rv$samples)
+      
       if (!is.null(cmp) && length(cmp$included_samples()) > 0L) {
         cols <- unique(c("cmp_group", cols))
+        # Force metadata_column to cmp_group
+        shiny::updateSelectInput(
+          session, "metadata_column",
+          choices  = cols,
+          selected = "cmp_group"
+        )
+      } else {
+        shiny::updateSelectInput(
+          session, "metadata_column",
+          choices  = cols,
+          selected = cols[1]
+        )
       }
-      shiny::updateSelectInput(
-        session, "metadata_column",
-        choices  = cols,
-        selected = if ("cmp_group" %in% cols) "cmp_group" else cols[1]
-      )
     })
+    
     
     # ---- dynamic top/extra-annotation picker (like ssGSEA) -------------------
     output$ann_cols_ui <- shiny::renderUI({
@@ -145,8 +154,7 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       shiny::req(filtered_data_rv$counts, filtered_data_rv$samples, filtered_data_rv$species)
       
       use_cmp <- !is.null(cmp) &&
-        length(cmp$included_samples()) > 0L &&
-        identical(input$metadata_column, "cmp_group")
+        length(cmp$included_samples()) > 0L
       
       if (!use_cmp) {
         if (identical(input$reference_condition, input$test_condition)) {

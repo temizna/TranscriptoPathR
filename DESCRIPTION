@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 1.1.0
+Version: 1.1.1
 Authors@R: person("Alpay", "Temiz", email = "temizna@umn.edu", role = c("aut", "cre"))
 Description: 
     TranscriptoPathR provides an interactive Shiny interface for complete RNA-Seq analysis,
