@@ -26,7 +26,104 @@
 mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, cmp = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    .current_ref_label <- function() {
+      if (!is.null(cmp) &&
+          identical(input$metadata_column, "cmp_group") &&
+          length(cmp$included_samples()) > 0L) {
+        return(tryCatch(cmp$ref_level(), error = function(e) NULL))
+      }
+      input$reference_condition
+    }
     
+    .current_test_label <- function() {
+      if (!is.null(cmp) &&
+          identical(input$metadata_column, "cmp_group") &&
+          length(cmp$included_samples()) > 0L) {
+        return(tryCatch(cmp$test_level(), error = function(e) NULL))
+      }
+      input$test_condition
+    }
+    
+    .current_cmp_tag <- function() {
+      test <- .current_test_label()
+      ref  <- .current_ref_label()
+      if (is.null(test) || !nzchar(as.character(test)) ||
+          is.null(ref)  || !nzchar(as.character(ref))) {
+        return("contrast")
+      }
+      paste0(.safe_tag(test), "_vs_", .safe_tag(ref))
+    }
+    
+    .heatmap_payload <- function() {
+      shiny::req(res_reactive(), filtered_data_rv$norm_counts, filtered_data_rv$samples)
+      
+      res_df <- res_reactive()
+      keep <- !is.na(res_df$padj) & !is.na(res_df$log2FoldChange) &
+        abs(res_df$log2FoldChange) >= input$lfc_threshold &
+        res_df$padj <= input$padj_threshold
+      res_df <- res_df[keep, , drop = FALSE]
+      
+      shiny::validate(shiny::need(nrow(res_df) >= 2, "Not enough DE genes after filtering for heatmap."))
+      
+      top_n <- input$num_genes
+      top   <- head(res_df[order(res_df$padj), , drop = FALSE], top_n)
+      
+      sel_ids <- rownames(top)
+      expr <- filtered_data_rv$norm_counts[sel_ids, , drop = FALSE]
+      
+      use_cmp_now <- !is.null(cmp) &&
+        identical(input$metadata_column, "cmp_group") &&
+        length(cmp$included_samples()) > 0L
+      
+      if (use_cmp_now) {
+        expr <- expr[, cmp$included_samples(), drop = FALSE]
+      }
+      
+      expr <- log2(expr + 1)
+      
+      lab <- top$symbol
+      if (is.null(lab) || !length(lab)) lab <- sel_ids
+      lab[is.na(lab) | lab == ""] <- sel_ids[is.na(lab) | lab == ""]
+      rownames(expr) <- make.unique(lab)
+      
+      samples_for_ann <- filtered_data_rv$samples
+      if (use_cmp_now) {
+        role <- setNames(as.character(cmp$cmp_factor()), cmp$included_samples())
+        samples_for_ann$cmp_group <- factor(
+          role[rownames(samples_for_ann)],
+          levels = c("Reference", "Test")
+        )
+      }
+      
+      primary_col <- if (!is.null(input$ann_primary) &&
+                         input$ann_primary %in% colnames(samples_for_ann)) {
+        input$ann_primary
+      } else if (use_cmp_now) {
+        "cmp_group"
+      } else {
+        input$metadata_column
+      }
+      
+      ann_cols <- input$ann_cols %||% character(0)
+      
+      transpose <- isTRUE(input$transpose_heatmap) && nrow(expr) <= 100
+      
+      if (isTRUE(input$transpose_heatmap) && nrow(expr) > 100) {
+        shiny::showNotification(
+          "Heatmap reversal is only available when 100 genes or fewer are displayed.",
+          type = "warning"
+        )
+      }
+      
+      list(
+        expr = expr,
+        samples_for_ann = samples_for_ann,
+        primary_col = primary_col,
+        ann_cols = ann_cols,
+        top_n = top_n,
+        transpose = transpose
+      )
+    }
     # ---- helpers -------------------------------------------------------------
     .build_top_annotation <- function(samples, primary_col, extra_cols, col_order) {
       # primary group (fallback if missing)
@@ -238,156 +335,141 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
     
     # ---- heatmap (screen) ----------------------------------------------------
     output$heatmapPlot <- shiny::renderPlot({
-      shiny::req(res_reactive(), filtered_data_rv$norm_counts, filtered_data_rv$samples)
+      hpdat <- .heatmap_payload()
       
-      res_df <- res_reactive()
-      keep <- !is.na(res_df$padj) & !is.na(res_df$log2FoldChange) &
-        abs(res_df$log2FoldChange) >= input$lfc_threshold &
-        res_df$padj <= input$padj_threshold
-      res_df <- res_df[keep, , drop = FALSE]
-      shiny::validate(shiny::need(nrow(res_df) >= 2, "Not enough DE genes after filtering for heatmap."))
+      plot_mat <- if (isTRUE(hpdat$transpose)) t(hpdat$expr) else hpdat$expr
       
-      top_n <- input$num_genes
-      top   <- head(res_df[order(res_df$padj), ], top_n)
-      
-      sel_ids <- rownames(top)
-      expr <- filtered_data_rv$norm_counts[sel_ids, , drop = FALSE]
-      
-      use_cmp_now <- !is.null(cmp) && identical(input$metadata_column, "cmp_group") && length(cmp$included_samples()) > 0
-      if (use_cmp_now) {
-        expr <- expr[, cmp$included_samples(), drop = FALSE]
-      }
-      expr <- log2(expr + 1)
-      
-      # SYMBOL row labels (fallback to IDs)
-      lab <- top$symbol
-      if (is.null(lab) || !length(lab)) lab <- sel_ids
-      lab[is.na(lab) | lab == ""] <- sel_ids[is.na(lab) | lab == ""]
-      rownames(expr) <- make.unique(lab)
-      
-      # samples copy for annotations (inject cmp_group if needed)
-      samples_for_ann <- filtered_data_rv$samples
-      if (use_cmp_now) {
-        role <- setNames(as.character(cmp$cmp_factor()), cmp$included_samples())
-        samples_for_ann$cmp_group <- factor(role[rownames(samples_for_ann)],
-                                            levels = c("Reference","Test"))
-      }
-      
-      # primary column from UI; fallback to cmp_group/metadata_column
-      primary_col <- if (!is.null(input$ann_primary) &&
-                         input$ann_primary %in% colnames(samples_for_ann)) {
-        input$ann_primary
-      } else if (use_cmp_now) {
-        "cmp_group"
-      } else {
-        input$metadata_column
-      }
-      
-      # build top annotation (primary + extra tracks)
-      ann_cols <- input$ann_cols %||% character(0)
-      ha <- .build_top_annotation(
-        samples     = samples_for_ann,
-        primary_col = primary_col,
-        extra_cols  = ann_cols,
-        col_order   = colnames(expr)
-      )
-      
-      hp <- ComplexHeatmap::Heatmap(
-        expr,
-        name = "log2(norm counts)",
-        top_annotation   = ha,
-        cluster_rows     = TRUE,
-        cluster_columns  = isTRUE(input$cluster_columns),
-        show_column_names = FALSE,
-        show_row_names   = TRUE,
-        row_names_gp     = grid::gpar(fontsize = 6, fontface = "bold"),
-        column_title     = paste("Top", min(top_n, nrow(expr)), "Diff Genes"),
-        column_title_gp  = grid::gpar(fontface = "bold")
-      )
-      ComplexHeatmap::draw(hp)
-    })
-    
-    # ---- heatmap (PDF) -------------------------------------------------------
-    output$download_heatmap <- shiny::downloadHandler(
-      filename = function() paste0("heatmap_", Sys.Date(), ".pdf"),
-      content = function(file) {
-        grDevices::pdf(file, width = 10, height = 8)
-        
-        res_df <- res_reactive()
-        keep <- !is.na(res_df$padj) & !is.na(res_df$log2FoldChange) &
-          abs(res_df$log2FoldChange) >= input$lfc_threshold &
-          res_df$padj <= input$padj_threshold
-        res_df <- res_df[keep, , drop = FALSE]
-        if (nrow(res_df) < 2) {
-          grid::grid.newpage(); grid::grid.text("Not enough DE genes for heatmap."); grDevices::dev.off(); return()
-        }
-        
-        top_n <- input$num_genes
-        top   <- head(res_df[order(res_df$padj), ], top_n)
-        sel_ids <- rownames(top)
-        expr <- filtered_data_rv$norm_counts[sel_ids, , drop = FALSE]
-        
-        use_cmp_now <- !is.null(cmp) && identical(input$metadata_column, "cmp_group") && length(cmp$included_samples()) > 0
-        if (use_cmp_now) expr <- expr[, cmp$included_samples(), drop = FALSE]
-        expr <- log2(expr + 1)
-        
-        lab <- top$symbol
-        if (is.null(lab) || !length(lab)) lab <- sel_ids
-        lab[is.na(lab) | lab == ""] <- sel_ids[is.na(lab) | lab == ""]
-        rownames(expr) <- make.unique(lab)
-        
-        samples_for_ann <- filtered_data_rv$samples
-        if (use_cmp_now) {
-          role <- setNames(as.character(cmp$cmp_factor()), cmp$included_samples())
-          samples_for_ann$cmp_group <- factor(role[rownames(samples_for_ann)],
-                                              levels = c("Reference","Test"))
-        }
-        
-        primary_col <- if (!is.null(input$ann_primary) &&
-                           input$ann_primary %in% colnames(samples_for_ann)) {
-          input$ann_primary
-        } else if (use_cmp_now) {
-          "cmp_group"
-        } else {
-          input$metadata_column
-        }
-        
-        ann_cols <- input$ann_cols %||% character(0)
-        ha <- .build_top_annotation(
-          samples     = samples_for_ann,
-          primary_col = primary_col,
-          extra_cols  = ann_cols,
-          col_order   = colnames(expr)
+      if (isTRUE(hpdat$transpose)) {
+        row_ha <- .build_top_annotation(
+          samples     = hpdat$samples_for_ann,
+          primary_col = hpdat$primary_col,
+          extra_cols  = hpdat$ann_cols,
+          col_order   = rownames(plot_mat)
         )
         
         hp <- ComplexHeatmap::Heatmap(
-          expr,
+          plot_mat,
           name = "log2(norm counts)",
-          top_annotation   = ha,
-          cluster_rows     = TRUE,
-          cluster_columns  = isTRUE(input$cluster_columns),
-          show_column_names = FALSE,
-          show_row_names   = TRUE,
-          row_names_gp     = grid::gpar(fontsize = 6, fontface = "bold"),
-          column_title     = paste("Top", min(top_n, nrow(expr)), "Diff Genes"),
-          column_title_gp  = grid::gpar(fontface = "bold")
+          left_annotation   = row_ha,
+          cluster_rows      = isTRUE(input$cluster_columns),
+          cluster_columns   = TRUE,
+          show_row_names    = FALSE,
+          show_column_names = TRUE,
+          column_names_gp   = grid::gpar(fontsize = 6, fontface = "bold"),
+          row_title         = "Samples",
+          column_title      = paste("Top", min(hpdat$top_n, ncol(plot_mat)), "Diff Genes"),
+          column_title_gp   = grid::gpar(fontface = "bold")
         )
+      } else {
+        ha <- .build_top_annotation(
+          samples     = hpdat$samples_for_ann,
+          primary_col = hpdat$primary_col,
+          extra_cols  = hpdat$ann_cols,
+          col_order   = colnames(plot_mat)
+        )
+        
+        hp <- ComplexHeatmap::Heatmap(
+          plot_mat,
+          name = "log2(norm counts)",
+          top_annotation    = ha,
+          cluster_rows      = TRUE,
+          cluster_columns   = isTRUE(input$cluster_columns),
+          show_column_names = FALSE,
+          show_row_names    = TRUE,
+          row_names_gp      = grid::gpar(fontsize = 6, fontface = "bold"),
+          column_title      = paste("Top", min(hpdat$top_n, nrow(plot_mat)), "Diff Genes"),
+          column_title_gp   = grid::gpar(fontface = "bold")
+        )
+      }
+      
+      ComplexHeatmap::draw(hp)
+    })
+    # ---- heatmap (PDF) -------------------------------------------------------
+    output$download_heatmap <- shiny::downloadHandler(
+      filename = function() paste0("heatmap_", .current_cmp_tag(), ".pdf"),
+      content = function(file) {
+        grDevices::pdf(file, width = 10, height = 8)
+        
+        hpdat <- tryCatch(.heatmap_payload(), error = function(e) NULL)
+        if (is.null(hpdat)) {
+          grid::grid.newpage()
+          grid::grid.text("Not enough DE genes for heatmap.")
+          grDevices::dev.off()
+          return()
+        }
+        
+        plot_mat <- if (isTRUE(hpdat$transpose)) t(hpdat$expr) else hpdat$expr
+        
+        if (isTRUE(hpdat$transpose)) {
+          row_ha <- .build_top_annotation(
+            samples     = hpdat$samples_for_ann,
+            primary_col = hpdat$primary_col,
+            extra_cols  = hpdat$ann_cols,
+            col_order   = rownames(plot_mat)
+          )
+          
+          hp <- ComplexHeatmap::Heatmap(
+            plot_mat,
+            name = "log2(norm counts)",
+            left_annotation   = row_ha,
+            cluster_rows      = isTRUE(input$cluster_columns),
+            cluster_columns   = TRUE,
+            show_row_names    = FALSE,
+            show_column_names = TRUE,
+            column_names_gp   = grid::gpar(fontsize = 6, fontface = "bold"),
+            row_title         = "Samples",
+            column_title      = paste("Top", min(hpdat$top_n, ncol(plot_mat)), "Diff Genes"),
+            column_title_gp   = grid::gpar(fontface = "bold")
+          )
+        } else {
+          ha <- .build_top_annotation(
+            samples     = hpdat$samples_for_ann,
+            primary_col = hpdat$primary_col,
+            extra_cols  = hpdat$ann_cols,
+            col_order   = colnames(plot_mat)
+          )
+          
+          hp <- ComplexHeatmap::Heatmap(
+            plot_mat,
+            name = "log2(norm counts)",
+            top_annotation    = ha,
+            cluster_rows      = TRUE,
+            cluster_columns   = isTRUE(input$cluster_columns),
+            show_column_names = FALSE,
+            show_row_names    = TRUE,
+            row_names_gp      = grid::gpar(fontsize = 6, fontface = "bold"),
+            column_title      = paste("Top", min(hpdat$top_n, nrow(plot_mat)), "Diff Genes"),
+            column_title_gp   = grid::gpar(fontface = "bold")
+          )
+        }
+        
         ComplexHeatmap::draw(hp)
         grDevices::dev.off()
       }
     )
-    
+    output$download_heatmap_matrix <- shiny::downloadHandler(
+      filename = function() paste0("heatmap_matrix_", .current_cmp_tag(), ".csv"),
+      content = function(file) {
+        hpdat <- .heatmap_payload()
+        out_mat <- if (isTRUE(hpdat$transpose)) t(hpdat$expr) else hpdat$expr
+        utils::write.csv(
+          as.data.frame(out_mat),
+          file = file,
+          row.names = TRUE
+        )
+      }
+    )
     # ---- results csv ---------------------------------------------------------
     output$download_de_table <- shiny::downloadHandler(
-      filename = function() "differential_expression_results.csv",
+      filename = function() paste0("differential_expression_", .current_cmp_tag(), "_results.csv"),
       content  = function(file) utils::write.csv(res_reactive(), file, row.names = FALSE)
     )
     
     # ---- public API ----------------------------------------------------------
     list(
       group_var        = shiny::reactive(if (identical(input$metadata_column, "cmp_group")) "cmp_group" else input$metadata_column),
-      ref_level        = shiny::reactive(if (identical(input$metadata_column, "cmp_group")) "Reference" else input$reference_condition),
-      test_level       = shiny::reactive(if (identical(input$metadata_column, "cmp_group")) "Test" else input$test_condition),
+      ref_level        = shiny::reactive(.current_ref_label()),
+      test_level       = shiny::reactive(.current_test_label()),
       cmp_factor       = shiny::reactive(if (!is.null(cmp) && identical(input$metadata_column, "cmp_group")) cmp$cmp_factor() else NULL),
       included_samples = shiny::reactive(if (!is.null(cmp) && identical(input$metadata_column, "cmp_group")) cmp$included_samples() else NULL)
     )

@@ -14,7 +14,7 @@
 #' Build a "test_vs_ref" tag from DE selection reactives
 #'
 #' Safely extracts ref_level() and test_level() from a list returned by
-#' mod_de_server() and returns "Test_vs_Ref" with unsafe characters replaced.
+#' mod_de_server() and returns "test_vs_ref" with unsafe characters replaced.
 #' Falls back to "contrast" if the levels are not available.
 #'
 #' @param de_sel A list returned by mod_de_server(), containing
@@ -24,12 +24,15 @@
 #' @noRd
 .contrast_tag_from <- function(de_sel) {
   if (is.null(de_sel)) return("contrast")
+  
   ref  <- try(de_sel$ref_level(),  silent = TRUE)
   test <- try(de_sel$test_level(), silent = TRUE)
+  
   if (inherits(ref, "try-error") || inherits(test, "try-error") ||
       is.null(ref) || is.null(test) || ref == "" || test == "") {
     return("contrast")
   }
+  
   paste0(.safe_tag(test), "_vs_", .safe_tag(ref))
 }
 
@@ -38,7 +41,7 @@
 #' Wrap the list returned by mod_de_server() and add two convenience
 #' reactives:
 #' - label(): human-readable label built from label_fmt.
-#' - tag(): file-safe tag built as "Test_vs_Ref".
+#' - tag(): file-safe tag built as "test_vs_ref".
 #'
 #' @param de_sel A list returned by mod_de_server(), containing
 #'   group_var, ref_level, and test_level reactives.
@@ -62,13 +65,17 @@ make_cmp_bridge <- function(de_sel, label_fmt = "%s vs %s") {
     group_var  = de_sel$group_var,
     ref_level  = de_sel$ref_level,
     test_level = de_sel$test_level,
+    
     label = shiny::reactive({
-      sprintf(
-        label_fmt,
-        tryCatch(de_sel$test_level(), error = function(e) "TEST"),
-        tryCatch(de_sel$ref_level(),  error = function(e) "REF")
-      )
+      test <- tryCatch(de_sel$test_level(), error = function(e) NULL)
+      ref  <- tryCatch(de_sel$ref_level(),  error = function(e) NULL)
+      
+      if (is.null(test) || !nzchar(as.character(test))) test <- "TEST"
+      if (is.null(ref)  || !nzchar(as.character(ref)))  ref  <- "REF"
+      
+      sprintf(label_fmt, test, ref)
     }),
+    
     tag = shiny::reactive({
       .contrast_tag_from(de_sel)
     })
@@ -83,7 +90,8 @@ make_cmp_bridge <- function(de_sel, label_fmt = "%s vs %s") {
 #' @keywords internal
 de_group_vector <- function(de_sel, samples_df, sample_ids) {
   stopifnot(!is.null(samples_df), !is.null(sample_ids))
-  # comparison-driven DE?
+  
+  # comparison-driven DE
   if (!is.null(de_sel$group_var) &&
       identical(tryCatch(de_sel$group_var(), error = function(e) NULL), "cmp_group") &&
       !is.null(de_sel$cmp_factor) && !is.null(de_sel$included_samples)) {
@@ -95,12 +103,13 @@ de_group_vector <- function(de_sel, samples_df, sample_ids) {
       return(unname(out))
     }
   }
+  
   # regular DE (no comparison) -> read from metadata column
   gv <- tryCatch(de_sel$group_var(), error = function(e) NULL)
   if (!is.null(gv) && gv %in% colnames(samples_df)) {
     v <- as.character(samples_df[sample_ids, gv, drop = TRUE])
     return(unname(v))
   }
+  
   rep(NA_character_, length(sample_ids))
 }
-

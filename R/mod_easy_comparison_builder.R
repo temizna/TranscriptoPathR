@@ -178,8 +178,7 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
       included_out(rownames(smp_sub))
       cmp_factor_out(role)
       label_out(paste0(test_label(), " vs ", ref_label()))
-      tag_out(paste0(safe_tag(make.names(test_label())), "_vs_", safe_tag(make.names(ref_label()))))
-      
+      tag_out(paste0(safe_tag(test_label()), "_vs_", safe_tag(ref_label())))      
       output$preview_samples <- shiny::renderTable({
         data.frame(
           sample = rownames(smp_sub),
@@ -196,8 +195,8 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
           test_label      = test_label(),
           reference_label = ref_label(),
           group_var       = cmp_group_name(),
-          test_level      = "Test",
-          reference_level = "Reference",
+          test_level      = test_label(),
+          reference_level = ref_label(),
           adjusted_for    = if (length(input$covariates)) paste(input$covariates, collapse = ", ") else "",
           stringsAsFactors = FALSE,
           check.names = FALSE
@@ -215,8 +214,8 @@ mod_easy_compare_server <- function(id, filtered_data_rv) {
     # ---- Public API ---------------------------------------------------------
     list(
       group_var        = shiny::reactive(cmp_group_name()),
-      ref_level        = shiny::reactive("Reference"),
-      test_level       = shiny::reactive("Test"),
+      ref_level        = shiny::reactive(ref_label()),
+      test_level       = shiny::reactive(test_label()),
       label            = shiny::reactive(label_out()),
       tag              = shiny::reactive(tag_out()),
       included_samples = shiny::reactive(included_out()),

@@ -36,6 +36,7 @@ mod_cross_tab_ui <- function(id) {
         shiny::textInput(ns("crosspath_filename"),  "Pathway Dotplot file name", value = "crosspath.pdf"),
         
         shiny::downloadButton(ns("download_cross_plot"),              "Download Cross Plot"),
+        downloadButton(ns("download_cross_data"), "Download Cross Plot Data (CSV)"),
         shiny::downloadButton(ns("download_cross_venn_plot"),         "Download Venn Diagram"),
         shiny::downloadButton(ns("download_overlap_genes"),           "Download Overlapping Genes"),
         shiny::downloadButton(ns("download_cross_category_heatmap"),  "Download Heatmap"),

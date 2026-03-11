@@ -28,6 +28,19 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       x <- x[!is.na(x) & nzchar(x)]
       unique(x)
     }
+    safe_tag <- function(x) gsub("[^A-Za-z0-9._-]+", "_", as.character(x))
+    
+    .cmp_tag <- function(meta, test, ref) {
+      paste0(safe_tag(meta), "_", safe_tag(test), "_vs_", safe_tag(ref))
+    }
+    
+    .cross_tag <- function() {
+      paste0(
+        .cmp_tag(input$metadata_column_x, input$test_condition_x, input$reference_condition_x),
+        "__",
+        .cmp_tag(input$metadata_column_y, input$test_condition_y, input$reference_condition_y)
+      )
+    }
     parse_gene_ratio <- function(gr) {
       if (!length(gr)) return(NA_real_)
       if (is.numeric(gr)) return(as.numeric(gr))
@@ -205,6 +218,25 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
       
       # Display label column (SYMBOL if possible)
       merged_df$display_gene <- merged_df$gene
+      merged_df$category <- "Other"
+      merged_df$category[merged_df$log2FoldChange_x >=  1 & merged_df$log2FoldChange_y >=  1] <- "Up-Up"
+      merged_df$category[merged_df$log2FoldChange_x <= -1 & merged_df$log2FoldChange_y <= -1] <- "Down-Down"
+      merged_df$category[merged_df$log2FoldChange_x >=  1 & merged_df$log2FoldChange_y <= -1] <- "Up-Down"
+      merged_df$category[merged_df$log2FoldChange_x <= -1 & merged_df$log2FoldChange_y >=  1] <- "Down-Up"
+      merged_df$category[abs(merged_df$log2FoldChange_x) >  1 & abs(merged_df$log2FoldChange_y) <  1] <- "Comp1-only"
+      merged_df$category[abs(merged_df$log2FoldChange_x) <  1 & abs(merged_df$log2FoldChange_y) >  1] <- "Comp2-only"
+      
+      merged_df$regulation_x <- ifelse(
+        is.na(merged_df$log2FoldChange_x), NA_character_,
+        ifelse(merged_df$log2FoldChange_x >= 1, "Up",
+               ifelse(merged_df$log2FoldChange_x <= -1, "Down", "Neutral"))
+      )
+      
+      merged_df$regulation_y <- ifelse(
+        is.na(merged_df$log2FoldChange_y), NA_character_,
+        ifelse(merged_df$log2FoldChange_y >= 1, "Up",
+               ifelse(merged_df$log2FoldChange_y <= -1, "Down", "Neutral"))
+      )
       if (is_ensembl_id(merged_df$gene)) {
         conv <- convert_ensembl_to_symbol(merged_df$gene, filtered_data_rv$species)
         merged_df$display_gene <- ifelse(is.na(conv) | !nzchar(conv), merged_df$gene, conv)
@@ -237,14 +269,6 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     # ---- 3) Cross plot tab ----
     generate_cross_plot <- function(df, n_keep, tx, rx, ty, ry) {
       df$combined_padj <- pmax(df$padj_x, df$padj_y, na.rm = TRUE)
-      df$category <- "Other"
-      df$category[df$log2FoldChange_x >=  1 & df$log2FoldChange_y >=  1] <- "Up-Up"
-      df$category[df$log2FoldChange_x <= -1 & df$log2FoldChange_y <= -1] <- "Down-Down"
-      df$category[df$log2FoldChange_x >=  1 & df$log2FoldChange_y <= -1] <- "Up-Down"
-      df$category[df$log2FoldChange_x <= -1 & df$log2FoldChange_y >=  1] <- "Down-Up"
-      df$category[abs(df$log2FoldChange_x) >  1 & abs(df$log2FoldChange_y) <  1] <- "Comp1-only"
-      df$category[abs(df$log2FoldChange_x) <  1 & abs(df$log2FoldChange_y) >  1] <- "Comp2-only"
-      
       df <- head(df, n_keep)
       
       pearson  <- round(stats::cor(df$log2FoldChange_x, df$log2FoldChange_y, method = "pearson",  use = "complete.obs"), 3)
@@ -259,13 +283,13 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
         ggplot2::geom_vline(xintercept = c(-1, 1), linetype = "solid", color = "blue") +
         ggplot2::geom_hline(yintercept = c(-1, 1), linetype = "solid", color = "blue") +
         ggplot2::scale_color_manual(values = c(
-          "Up-Up" = "firebrick",
-          "Down-Down" = "royalblue",
-          "Up-Down" = "goldenrod",
-          "Down-Up" = "purple",
-          "Comp1-only" = "darkorange",
-          "Comp2-only" = "darkgreen",
-          "Other" = "gray"
+          "Up-Up"     = "#D55E00",
+          "Down-Down" = "#0072B2",
+          "Up-Down"   = "#CC79A7",
+          "Down-Up"   = "#56B4E9",
+          "Comp1-only"= "#E69F00",
+          "Comp2-only"= "#009E73",
+          "Other"     = "#999999"
         )) +
         ggplot2::theme_minimal() +
         ggplot2::labs(
@@ -299,7 +323,17 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     })
     
     output$download_cross_plot <- shiny::downloadHandler(
-      filename = function() input$crossplot_filename,
+      filename = function() {
+        ext <- tools::file_ext(input$crossplot_filename)
+        nm <- if (nzchar(input$crossplot_filename)) input$crossplot_filename else ""
+        if (!nzchar(nm)) {
+          return(paste0("cross_plot_", .cross_tag(), ".pdf"))
+        }
+        if (!nzchar(ext)) {
+          return(paste0(nm, "_", .cross_tag(), ".pdf"))
+        }
+        paste0(tools::file_path_sans_ext(nm), "_", .cross_tag(), ".", ext)
+      },
       content  = function(file) {
         shiny::req(crossplot_data())
         p <- generate_cross_plot(
@@ -311,7 +345,37 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
         ggplot2::ggsave(file, p, width = 10, height = 8)
       }
     )
-    
+    output$download_cross_data <- shiny::downloadHandler(
+      filename = function() paste0("cross_plot_data_", .cross_tag(), ".csv"),
+      content = function(file) {
+        shiny::req(crossplot_data())
+        df <- crossplot_data()
+        
+        n_keep <- tryCatch(as.numeric(input$crossplot_gene_count), error = function(e) NA_real_)
+        if (is.na(n_keep) || n_keep <= 0) n_keep <- nrow(df)
+        df <- head(df, n_keep)
+        
+        out <- df[, c(
+          "gene", "display_gene",
+          "log2FoldChange_x", "padj_x", "regulation_x",
+          "log2FoldChange_y", "padj_y", "regulation_y",
+          "category", "combined_padj", "label"
+        ), drop = FALSE]
+        
+        colnames(out) <- c(
+          "gene_id", "display_gene",
+          paste0("log2FoldChange_", input$metadata_column_x, "_", input$test_condition_x, "_vs_", input$reference_condition_x),
+          paste0("padj_", input$metadata_column_x, "_", input$test_condition_x, "_vs_", input$reference_condition_x),
+          paste0("regulation_", input$metadata_column_x, "_", input$test_condition_x, "_vs_", input$reference_condition_x),
+          paste0("log2FoldChange_", input$metadata_column_y, "_", input$test_condition_y, "_vs_", input$reference_condition_y),
+          paste0("padj_", input$metadata_column_y, "_", input$test_condition_y, "_vs_", input$reference_condition_y),
+          paste0("regulation_", input$metadata_column_y, "_", input$test_condition_y, "_vs_", input$reference_condition_y),
+          "cross_category", "combined_padj", "label"
+        )
+        
+        utils::write.csv(out, file, row.names = FALSE)
+      }
+    )
     # ---- 4) Pathway Dotplot tab ----
     generate_cross_pathway_plot <- function(df, species) {
       species <- species %||% "Homo sapiens"
@@ -383,7 +447,14 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     output$download_cross_pathway_plot <- shiny::downloadHandler(
       filename = function() {
         ext <- tools::file_ext(input$crosspath_filename)
-        if (identical(ext, "")) paste0("cross_pathway_", Sys.Date(), ".pdf") else input$crosspath_filename
+        nm <- if (nzchar(input$crosspath_filename)) input$crosspath_filename else ""
+        if (!nzchar(nm)) {
+          return(paste0("cross_pathway_", .cross_tag(), ".pdf"))
+        }
+        if (identical(ext, "")) {
+          return(paste0(nm, "_", .cross_tag(), ".pdf"))
+        }
+        paste0(tools::file_path_sans_ext(nm), "_", .cross_tag(), ".", ext)
       },
       content = function(file) {
         p <- generate_cross_pathway_plot(crossplot_data(), filtered_data_rv$species)
@@ -426,7 +497,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     })
     
     output$download_cross_venn_plot <- shiny::downloadHandler(
-      filename = function() paste0("cross_venn_plot_", Sys.Date(), ".pdf"),
+      filename = function() paste0("cross_venn_plot_", .cross_tag(), ".pdf"),
       content  = function(file) {
         grDevices::pdf(file, width = 10, height = 6)
         vp <- generate_cross_venn_plot(crossplot_data())
@@ -441,22 +512,49 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     
     output$download_overlap_genes <- shiny::downloadHandler(
       filename = function() {
-        paste0("cross_plot_overlap_genes_", Sys.Date(), "_",
-               input$test_condition_x, "_", input$test_condition_y, ".csv")
+        paste0("cross_plot_overlap_genes_", .cross_tag(), ".csv")
       },
       content = function(file) {
         shiny::req(crossplot_data())
         df <- crossplot_data()
-        lfc_cutoff <- 1; padj_cutoff <- 0.05
-        up_x   <- sanitize_vec(df$gene[df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff])
-        up_y   <- sanitize_vec(df$gene[df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff])
-        down_x <- sanitize_vec(df$gene[df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff])
-        down_y <- sanitize_vec(df$gene[df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff])
+        lfc_cutoff <- 1
+        padj_cutoff <- 0.05
+        
+        up_up <- df[
+          df$log2FoldChange_x >  lfc_cutoff & df$padj_x < padj_cutoff &
+            df$log2FoldChange_y >  lfc_cutoff & df$padj_y < padj_cutoff,
+          , drop = FALSE
+        ]
+        
+        down_down <- df[
+          df$log2FoldChange_x < -lfc_cutoff & df$padj_x < padj_cutoff &
+            df$log2FoldChange_y < -lfc_cutoff & df$padj_y < padj_cutoff,
+          , drop = FALSE
+        ]
         
         out <- rbind(
-          data.frame(Gene = intersect(up_x, up_y),   Direction = "Upregulated"),
-          data.frame(Gene = intersect(down_x, down_y), Direction = "Downregulated")
+          data.frame(
+            Gene = up_up$gene,
+            Display_Gene = up_up$display_gene,
+            Category = "Up-Up",
+            log2FoldChange_x = up_up$log2FoldChange_x,
+            padj_x = up_up$padj_x,
+            log2FoldChange_y = up_up$log2FoldChange_y,
+            padj_y = up_up$padj_y,
+            stringsAsFactors = FALSE
+          ),
+          data.frame(
+            Gene = down_down$gene,
+            Display_Gene = down_down$display_gene,
+            Category = "Down-Down",
+            log2FoldChange_x = down_down$log2FoldChange_x,
+            padj_x = down_down$padj_x,
+            log2FoldChange_y = down_down$log2FoldChange_y,
+            padj_y = down_down$padj_y,
+            stringsAsFactors = FALSE
+          )
         )
+        
         utils::write.csv(out, file, row.names = FALSE)
       }
     )
@@ -521,7 +619,7 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     })
     
     output$download_cross_category_heatmap <- shiny::downloadHandler(
-      filename = function() paste0("cross_category_heatmap_", Sys.Date(), ".pdf"),
+      filename = function() paste0("cross_category_heatmap_", .cross_tag(), ".pdf"),
       content  = function(file) {
         shiny::req(crossplot_data(), filtered_data_rv$norm_counts, filtered_data_rv$samples)
         hp <- generate_cross_heat(crossplot_data(), filtered_data_rv$norm_counts,

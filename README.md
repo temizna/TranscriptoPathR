@@ -1,6 +1,6 @@
 Package: TranscriptoPathR
 Title: A Comprehensive Shiny App for RNA-Seq Analysis
-Version: 1.0.1
+Version: 1.1.3
 Authors@R: 
     person(Nuri Alpay, Temiz, email = temizna@umn.edu, role = c("aut", "cre"))
 Description: 
@@ -79,14 +79,13 @@ VignetteBuilder: knitr
   - DESeq2-based analysis with customizable thresholds and conditions, or use the groupings from complex comparison builder (default)
   - Heatmap of top differentially expressed genes 
   - Users can download DE table.
-
+  - Users can download the data associated with the heatmap. Users can also plot a transposed heatmap if needed.
 - **Volcano and MA Plots**  
   - Visualization of differential expression results with gene labeling
-
 - **Cross Plot**  
   - Compare DE results between two separete comparisons or experiments
   - A cross plot, Venn diagrams, heatmaps and pathway comparison is calcuated and plotted.
-
+  - All the data points in cross plot can be downloaded as log2FoldChange values.
 - **Pathway Analysis**  
   - GO, KEGG, Reactome enrichment using clusterProfiler  
   - Visualizations: dot plots, cnet, circular, emap  
