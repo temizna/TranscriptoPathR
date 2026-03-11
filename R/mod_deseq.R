@@ -53,7 +53,11 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       }
       paste0(.safe_tag(test), "_vs_", .safe_tag(ref))
     }
-    
+    .use_cmp_now <- function() {
+      isTRUE(input$use_cmp) &&
+        !is.null(cmp) &&
+        length(cmp$included_samples()) > 0L
+    }
     .heatmap_payload <- function() {
       shiny::req(res_reactive(), filtered_data_rv$norm_counts, filtered_data_rv$samples)
       
@@ -71,9 +75,8 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       sel_ids <- rownames(top)
       expr <- filtered_data_rv$norm_counts[sel_ids, , drop = FALSE]
       
-      use_cmp_now <- !is.null(cmp) &&
-        identical(input$metadata_column, "cmp_group") &&
-        length(cmp$included_samples()) > 0L
+      use_cmp_now <- .use_cmp_now() &&
+        identical(input$metadata_column, "cmp_group")
       
       if (use_cmp_now) {
         expr <- expr[, cmp$included_samples(), drop = FALSE]
@@ -172,6 +175,59 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       
       ComplexHeatmap::HeatmapAnnotation(df = ann_df, col = col_list)
     }
+    .build_row_annotation <- function(samples, primary_col, extra_cols, row_order) {
+      if (!primary_col %in% colnames(samples)) {
+        primary_col <- colnames(samples)[1]
+      }
+      
+      ann_df <- data.frame(
+        Group = factor(samples[row_order, primary_col, drop = TRUE]),
+        check.names = FALSE
+      )
+      
+      extra_cols <- intersect(extra_cols %||% character(0), setdiff(colnames(samples), primary_col))
+      for (cn in extra_cols) {
+        x <- samples[row_order, cn, drop = TRUE]
+        if (is.numeric(x) && length(unique(x)) > 12) {
+          q <- cut(
+            x,
+            breaks = unique(stats::quantile(x, probs = seq(0, 1, 0.25), na.rm = TRUE)),
+            include.lowest = TRUE, dig.lab = 6
+          )
+          ann_df[[cn]] <- q
+        } else {
+          ann_df[[cn]] <- factor(as.character(x))
+        }
+      }
+      
+      col_list <- list()
+      glv <- levels(ann_df$Group)
+      if (length(glv) <= 8) {
+        col_list$Group <- setNames(
+          RColorBrewer::brewer.pal(max(3, length(glv)), "Set2")[seq_along(glv)],
+          glv
+        )
+      } else {
+        col_list$Group <- setNames(grDevices::hcl.colors(length(glv), "Dark 3"), glv)
+      }
+      
+      if (length(extra_cols)) {
+        for (cn in extra_cols) {
+          lv <- levels(ann_df[[cn]])
+          pal <- if (length(lv) <= 8) {
+            sets <- c("Set3", "Pastel1", "Dark2", "Accent")
+            pnm  <- sets[(match(cn, extra_cols) - 1) %% length(sets) + 1]
+            base <- try(RColorBrewer::brewer.pal(max(3, length(lv)), pnm), silent = TRUE)
+            if (inherits(base, "try-error")) grDevices::hcl.colors(length(lv), "Dark 3") else base
+          } else {
+            grDevices::hcl.colors(length(lv), "Dark 3")
+          }
+          col_list[[cn]] <- setNames(pal[seq_along(lv)], lv)
+        }
+      }
+      
+      ComplexHeatmap::rowAnnotation(df = ann_df, col = col_list)
+    }
     
     `%||%` <- function(a, b) if (!is.null(a)) a else b
     
@@ -180,19 +236,21 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       shiny::req(filtered_data_rv$samples)
       cols <- colnames(filtered_data_rv$samples)
       
-      if (!is.null(cmp) && length(cmp$included_samples()) > 0L) {
+      if (.use_cmp_now()) {
         cols <- unique(c("cmp_group", cols))
-        # Force metadata_column to cmp_group
         shiny::updateSelectInput(
           session, "metadata_column",
           choices  = cols,
           selected = "cmp_group"
         )
       } else {
+        current <- isolate(input$metadata_column)
+        selected_col <- if (!is.null(current) && current %in% cols) current else cols[1]
+        
         shiny::updateSelectInput(
           session, "metadata_column",
           choices  = cols,
-          selected = cols[1]
+          selected = selected_col
         )
       }
     })
@@ -202,10 +260,10 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
     output$ann_cols_ui <- shiny::renderUI({
       shiny::req(filtered_data_rv$samples)
       cols <- colnames(filtered_data_rv$samples)
-      if (!is.null(cmp) && length(cmp$included_samples()) > 0L) {
+      if (.use_cmp_now()) {
         cols <- unique(c("cmp_group", cols))
       }
-      default_primary <- if (!is.null(cmp) && length(cmp$included_samples()) > 0) {
+     default_primary <- if (.use_cmp_now()) {
         "cmp_group"
       } else if (!is.null(input$metadata_column) && input$metadata_column %in% cols) {
         input$metadata_column
@@ -222,7 +280,7 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
     shiny::observeEvent(input$ann_primary, {
       shiny::req(filtered_data_rv$samples)
       cols <- colnames(filtered_data_rv$samples)
-      if (!is.null(cmp) && length(cmp$included_samples()) > 0L) {
+      if (.use_cmp_now()) {
         cols <- unique(c("cmp_group", cols))
       }
       shiny::updateSelectInput(session, "ann_cols",
@@ -250,20 +308,54 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
     shiny::observeEvent(input$run_de, {
       shiny::req(filtered_data_rv$counts, filtered_data_rv$samples, filtered_data_rv$species)
       
-      use_cmp <- !is.null(cmp) &&
-        length(cmp$included_samples()) > 0L
+      use_cmp <- .use_cmp_now()
       
       if (!use_cmp) {
+        shiny::req(input$metadata_column, input$reference_condition, input$test_condition)
+        
+        if (!input$metadata_column %in% colnames(filtered_data_rv$samples)) {
+          shiny::showNotification("Selected metadata column is not present in sample metadata.", type = "error")
+          return()
+        }
+        
+        grp <- filtered_data_rv$samples[[input$metadata_column]]
+        if (all(is.na(grp))) {
+          shiny::showNotification("Selected metadata column contains only missing values.", type = "error")
+          return()
+        }
+        
+        grp_chr <- as.character(grp)
+        if (!input$reference_condition %in% grp_chr) {
+          shiny::showNotification("Reference condition is not present in the selected metadata column.", type = "error")
+          return()
+        }
+        if (!input$test_condition %in% grp_chr) {
+          shiny::showNotification("Test condition is not present in the selected metadata column.", type = "error")
+          return()
+        }
         if (identical(input$reference_condition, input$test_condition)) {
           shiny::showNotification("Reference and Test conditions must be different.", type = "error"); return()
         }
+        keep <- !is.na(filtered_data_rv$samples[[input$metadata_column]])
+        keep <- keep & as.character(filtered_data_rv$samples[[input$metadata_column]]) %in%
+          c(input$reference_condition, input$test_condition)
+        
+        if (sum(keep) < 2) {
+          shiny::showNotification("Not enough samples remain after filtering to the selected reference/test conditions.", type = "error")
+          return()
+        }
+        
+        counts_sub  <- filtered_data_rv$counts[, keep, drop = FALSE]
+        coldata_sub <- filtered_data_rv$samples[keep, , drop = FALSE]
+        
         dds <- DESeq2::DESeqDataSetFromMatrix(
-          countData = filtered_data_rv$counts,
-          colData   = filtered_data_rv$samples,
+          countData = counts_sub,
+          colData   = coldata_sub,
           design    = stats::as.formula(paste("~", input$metadata_column))
         )
         dds[[input$metadata_column]] <- stats::relevel(
-          factor(dds[[input$metadata_column]]), ref = input$reference_condition
+          droplevels(factor(dds[[input$metadata_column]])),
+          ref = input$reference_condition
         )
         dds <- suppressMessages(DESeq2::DESeq(dds))
         res <- suppressMessages(DESeq2::results(
@@ -279,8 +371,9 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         coldata_sub <- filtered_data_rv$samples[ids, , drop = FALSE]
         role_vec <- as.character(cf)
         names(role_vec) <- ids  # just in case not already named
-        coldata_sub$cmp_group <- factor(role_vec[rownames(coldata_sub)], levels = c("Reference", "Test"))
-        
+        coldata_sub$cmp_group <- droplevels(
+          factor(role_vec[rownames(coldata_sub)], levels = c("Reference", "Test"))
+        ) 
         message("=== DEBUG: cmp_group column ===")
         print(table(coldata_sub$cmp_group))
         print(head(coldata_sub[, c("cmp_group")], 10))
@@ -293,10 +386,17 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         stopifnot(length(ids) == length(cf))  # required
         
         # Check matching
+        true_group <- NULL
+        if (!is.null(input$metadata_column) &&
+            input$metadata_column %in% colnames(filtered_data_rv$samples)) {
+          true_group <- as.character(filtered_data_rv$samples[ids, input$metadata_column, drop = TRUE])
+        }
+        
         role_df <- data.frame(
           sample = ids,
           role = as.character(cf),
-          true_group = filtered_data_rv$samples[ids, input$group_var]
+          true_group = true_group,
+          stringsAsFactors = FALSE
         )
         print(head(role_df))
         
@@ -340,11 +440,11 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       plot_mat <- if (isTRUE(hpdat$transpose)) t(hpdat$expr) else hpdat$expr
       
       if (isTRUE(hpdat$transpose)) {
-        row_ha <- .build_top_annotation(
+        row_ha <- .build_row_annotation(
           samples     = hpdat$samples_for_ann,
           primary_col = hpdat$primary_col,
           extra_cols  = hpdat$ann_cols,
-          col_order   = rownames(plot_mat)
+          row_order   = rownames(plot_mat)
         )
         
         hp <- ComplexHeatmap::Heatmap(
@@ -401,11 +501,11 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         plot_mat <- if (isTRUE(hpdat$transpose)) t(hpdat$expr) else hpdat$expr
         
         if (isTRUE(hpdat$transpose)) {
-          row_ha <- .build_top_annotation(
+          row_ha <- .build_row_annotation(
             samples     = hpdat$samples_for_ann,
             primary_col = hpdat$primary_col,
             extra_cols  = hpdat$ann_cols,
-            col_order   = rownames(plot_mat)
+            row_order   = rownames(plot_mat)
           )
           
           hp <- ComplexHeatmap::Heatmap(
@@ -470,8 +570,8 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       group_var        = shiny::reactive(if (identical(input$metadata_column, "cmp_group")) "cmp_group" else input$metadata_column),
       ref_level        = shiny::reactive(.current_ref_label()),
       test_level       = shiny::reactive(.current_test_label()),
-      cmp_factor       = shiny::reactive(if (!is.null(cmp) && identical(input$metadata_column, "cmp_group")) cmp$cmp_factor() else NULL),
-      included_samples = shiny::reactive(if (!is.null(cmp) && identical(input$metadata_column, "cmp_group")) cmp$included_samples() else NULL)
+      cmp_factor       = shiny::reactive(if (.use_cmp_now() && identical(input$metadata_column, "cmp_group")) cmp$cmp_factor() else NULL),
+      included_samples = shiny::reactive(if (.use_cmp_now() && identical(input$metadata_column, "cmp_group")) cmp$included_samples() else NULL)
     )
   })
 }
