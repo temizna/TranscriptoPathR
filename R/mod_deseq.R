@@ -192,7 +192,8 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
           q <- cut(
             x,
             breaks = unique(stats::quantile(x, probs = seq(0, 1, 0.25), na.rm = TRUE)),
-            include.lowest = TRUE, dig.lab = 6
+            include.lowest = TRUE,
+            dig.lab = 6
           )
           ann_df[[cn]] <- q
         } else {
@@ -201,6 +202,7 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       }
       
       col_list <- list()
+      
       glv <- levels(ann_df$Group)
       if (length(glv) <= 8) {
         col_list$Group <- setNames(
@@ -226,7 +228,14 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
         }
       }
       
-      ComplexHeatmap::rowAnnotation(df = ann_df, col = col_list)
+      # IMPORTANT: build each track explicitly as a row annotation
+      ann_args <- c(
+        lapply(names(ann_df), function(nm) ann_df[[nm]]),
+        list(col = col_list)
+      )
+      names(ann_args)[seq_len(ncol(ann_df))] <- colnames(ann_df)
+      
+      do.call(ComplexHeatmap::rowAnnotation, ann_args)
     }
     
     `%||%` <- function(a, b) if (!is.null(a)) a else b

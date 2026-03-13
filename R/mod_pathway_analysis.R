@@ -23,27 +23,31 @@ mod_pathway_server <- function(
     ns <- session$ns
     
     .get_tag <- function() {
-      tryCatch({
-        if (!is.null(cmp)) {
-          t <- cmp$tag()
-          if (!is.null(t) && nzchar(t)) return(t)
-        }
-        .contrast_tag_from(de_sel)
-      }, error = function(e) .contrast_tag_from(de_sel))
+      if (isTRUE(input$pathway_use_custom_file) && !is.null(input$pathway_custom_file)) {
+        nm <- tools::file_path_sans_ext(input$pathway_custom_file$name)
+        if (!is.null(nm) && nzchar(nm)) return(nm)
+      }
+      
+      if (!is.null(cmp) && is.function(cmp$tag)) {
+        t <- cmp$tag()
+        if (!is.null(t) && nzchar(t)) return(t)
+      }
+      
+      .contrast_tag_from(de_sel)
     }
+    
     .safe_show_category <- function(pr, default = 5L) {
-      df <- tryCatch(as.data.frame(pr), error = function(e) NULL)
-      if (is.null(df) || !nrow(df)) return(0L)
+      df <- as.data.frame(pr)
       max(1L, min(as.integer(default), nrow(df)))
     }
     
     .foldchange_for_pr <- function(pr, fc) {
       if (is.null(fc) || !length(fc)) return(NULL)
       
-      df <- tryCatch(as.data.frame(pr), error = function(e) NULL)
-      if (is.null(df) || !nrow(df) || !"geneID" %in% colnames(df)) return(NULL)
+      df <- as.data.frame(pr)
+      if (!nrow(df) || !"geneID" %in% colnames(df)) return(NULL)
       
-      genes_in_terms <- unique(unlist(strsplit(as.character(df$geneID), "/|;")))
+      genes_in_terms <- unique(unlist(strsplit(as.character(df$geneID), "/")))
       genes_in_terms <- genes_in_terms[!is.na(genes_in_terms) & nzchar(genes_in_terms)]
       
       fc <- fc[!is.na(fc)]
@@ -55,42 +59,15 @@ mod_pathway_server <- function(
     }
     
     .render_circular_cnet <- function(pr, fc, layout, showCategory = 5L) {
-      shiny::req(pr)
+      df <- as.data.frame(pr)
+      if (!nrow(df)) stop("No enriched pathways available for circular plot.")
       
-      df <- tryCatch(as.data.frame(pr), error = function(e) NULL)
-      if (is.null(df) || !nrow(df)) stop("No enriched pathways available for circular plot.")
-      
-      sc <- .safe_show_category(pr, showCategory)
-      if (sc < 1L) stop("No categories available for circular plot.")
-      
-      fc_use <- .foldchange_for_pr(pr, fc)
-      
-      # Try requested layout first, then stable fallbacks
-      layouts <- unique(c(layout, "kk", "fr", "circle"))
-      
-      last_err <- NULL
-      for (lay in layouts) {
-        for (sc_try in unique(c(sc, min(sc, 3L), 1L))) {
-          p <- tryCatch({
-            enrichplot::cnetplot(
-              pr,
-              layout = lay,
-              foldChange = fc_use,
-              showCategory = sc_try,
-              circular = TRUE,
-              colorEdge = TRUE
-            )
-          }, error = function(e) {
-            last_err <<- e
-            NULL
-          })
-          
-          if (!is.null(p)) return(p)
-        }
-      }
-      
-      msg <- if (!is.null(last_err)) last_err$message else "Unknown circular plot error."
-      stop(msg)
+      enrichplot::cnetplot(
+        pr,
+        layout = layout,
+        foldChange = .foldchange_for_pr(pr, fc),
+        showCategory = .safe_show_category(pr, showCategory)
+      )
     }
     # ---- Custom DE file loader ----------------------------------------------
     custom_de_data <- reactive({
@@ -349,26 +326,6 @@ mod_pathway_server <- function(
       }
     )
     
-    output$cnetPlot <- shiny::renderPlot({
-      shiny::req(pathway_result_rv())
-      pr <- pathway_result_rv()
-      if (is.null(pr) || nrow(as.data.frame(pr)) == 0) {
-        shiny::showNotification("No enrichment terms available for cnetplot.", type = "warning")
-        return(NULL)
-      }
-      enrichplot::cnetplot(pr, showCategory = 10)
-    })
-    
-    output$download_cnet_plot <- shiny::downloadHandler(
-      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", .get_tag(), "_cnet_plot.pdf"),
-      content  = function(file) {
-        shiny::req(pathway_result_rv())
-        grDevices::pdf(file)
-        print(enrichplot::cnetplot(pathway_result_rv(), showCategory = 10))
-        grDevices::dev.off()
-      }
-    )
-    
     output$circularPlot <- shiny::renderPlot({
       shiny::req(pathway_result_rv())
       pr <- pathway_result_rv()
@@ -379,45 +336,58 @@ mod_pathway_server <- function(
         return(NULL)
       }
       
-      p <- tryCatch({
+      p <- tryCatch(
         .render_circular_cnet(
           pr = pr,
           fc = tryCatch(geneList_rv(), error = function(e) NULL),
           layout = input$circular_layout,
-          showCategory = 5L
-        )
-      }, error = function(e) {
-        shiny::showNotification(
-          paste("Circular plot could not be rendered:", e$message),
-          type = "warning",
-          duration = 6
-        )
-        NULL
-      })
+          showCategory = 10L
+        ),
+        error = function(e) {
+          shiny::showNotification(
+            paste("Circular plot could not be rendered:", e$message),
+            type = "warning",
+            duration = 6
+          )
+          NULL
+        }
+      )
       
       if (!is.null(p)) print(p)
     })
+    output$download_cnet_plot <- shiny::downloadHandler(
+      filename = function() paste0("Pathway_", input$pathway_db, "_", input$pathway_direction, "_", .get_tag(), "_cnet_plot.pdf"),
+      content  = function(file) {
+        shiny::req(pathway_result_rv())
+        grDevices::pdf(file)
+        print(enrichplot::cnetplot(pathway_result_rv(), showCategory = 10))
+        grDevices::dev.off()
+      }
+    )
     
     output$download_circular_plot <- shiny::downloadHandler(
-      filename = function() paste0(
-        "Pathway_", input$pathway_db, "_", input$pathway_direction, "_",
-        input$circular_layout, "_", .get_tag(), "_circular_plot.pdf"
-      ),
-      content  = function(file) {
+      filename = function() {
+        paste0(
+          "Pathway_", input$pathway_db, "_", input$pathway_direction, "_",
+          input$circular_layout, "_", .get_tag(), "_circular_plot.pdf"
+        )
+      },
+      content = function(file) {
         shiny::req(pathway_result_rv())
         pr <- pathway_result_rv()
         
         grDevices::pdf(file, width = 10, height = 8)
         on.exit(grDevices::dev.off(), add = TRUE)
         
-        p <- tryCatch({
+        p <- tryCatch(
           .render_circular_cnet(
             pr = pr,
             fc = tryCatch(geneList_rv(), error = function(e) NULL),
             layout = input$circular_layout,
-            showCategory = 5L
-          )
-        }, error = function(e) NULL)
+            showCategory = 10L
+          ),
+          error = function(e) NULL
+        )
         
         if (is.null(p)) {
           grid::grid.newpage()
