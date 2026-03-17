@@ -18,7 +18,19 @@
 #' @export
 mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL, cmp = NULL) {
   moduleServer(id, function(input, output, session) {
+    .get_tag <- function() {
+      if (isTRUE(input$gsea_use_custom_file) && !is.null(input$gsea_custom_file)) {
+        nm <- tools::file_path_sans_ext(input$gsea_custom_file$name)
+        if (!is.null(nm) && nzchar(nm)) return(nm)
+      }
       
+      if (!is.null(cmp) && is.function(cmp$tag)) {
+        t <- cmp$tag()
+        if (!is.null(t) && nzchar(t)) return(t)
+      }
+      
+      .contrast_tag_from(de_sel)
+    }
       observeEvent(input$run_gsea, {
         shiny::req(
           input$gsea_db,
@@ -171,9 +183,7 @@ mod_gsea_server <- function(id, filtered_data_rv, res_reactive, de_sel = NULL, c
       shiny::updateSelectInput(session, "gsea_selected_pathway", choices = gsea_result@result$ID)
       
       # Determine filename tag from cmp (preferred) or de_sel fallback
-      tag <- tryCatch({
-        if (!is.null(cmp)) cmp$tag() else .contrast_tag_from(de_sel)
-      }, error = function(e) .contrast_tag_from(de_sel))
+      tag <- .get_tag()
       
       # Dot plot (screen)
       output$gseaDotPlot <- shiny::renderPlot({

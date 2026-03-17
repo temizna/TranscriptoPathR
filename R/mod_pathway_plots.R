@@ -22,22 +22,23 @@ mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, de_sel 
     ns <- session$ns
     
     # -------- tag helper (cmp preferred, then de_sel, else "contrast")
-    .safe_tag <- function(x) gsub("[^A-Za-z0-9._-]+", "_", as.character(x))
     .get_tag <- function() {
-      # cmp$tag() if available
-      t <- try(if (!is.null(cmp) && is.function(cmp$tag)) cmp$tag(), silent = TRUE)
-      if (!inherits(t, "try-error") && !is.null(t) && nzchar(t)) return(t)
-      
-      # fall back to de_sel ref/test if present
-      if (!is.null(de_sel) && is.function(de_sel$ref_level) && is.function(de_sel$test_level)) {
-        ref  <- try(de_sel$ref_level(),  silent = TRUE)
-        test <- try(de_sel$test_level(), silent = TRUE)
-        if (!inherits(ref, "try-error") && !inherits(test, "try-error") &&
-            !is.null(ref) && !is.null(test) && nzchar(ref) && nzchar(test)) {
-          return(paste0(.safe_tag(test), "_vs_", .safe_tag(ref)))
-        }
+      if (isTRUE(input$pathway_use_custom_file) && !is.null(input$pathway_custom_file)) {
+        nm <- tools::file_path_sans_ext(input$pathway_custom_file$name)
+        if (!is.null(nm) && nzchar(nm)) return(nm)
       }
-      "contrast"
+      
+      if (!is.null(cmp) && is.function(cmp$tag)) {
+        t <- cmp$tag()
+        if (!is.null(t) && nzchar(t)) return(t)
+      }
+      
+      .contrast_tag_from(de_sel)
+    }
+    
+    .safe_show_category <- function(pr, default = 5L) {
+      df <- as.data.frame(pr)
+      max(1L, min(as.integer(default), nrow(df)))
     }
     
     # -------- Heatmap
@@ -50,7 +51,7 @@ mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, de_sel 
         shiny::showNotification("No enrichment terms available for heatmap.", type = "warning")
         return(NULL)
       }
-      enrichplot::heatplot(pr, foldChange = gl, showCategory = 5)
+      enrichplot::heatplot(pr, foldChange = gl, showCategory = 10)
     })
     
     # -------- Tree plot (guard against missing termsim and bad k/nWords)
