@@ -60,7 +60,7 @@ server <- function(input, output, session) {
     filtered_dds_rv = filtered_dds_rv
   )
   
-  mod_pathway_server(
+  pathway_sel <- mod_pathway_server(
     id = "pathway",
     filtered_data_rv = filtered_data_rv,
     res_reactive = res_reactive,
@@ -83,6 +83,8 @@ server <- function(input, output, session) {
     id = "pathplots",
     pathway_result_rv = pathway_result_rv,
     geneList_rv = geneList_rv,
+    tag_rv = pathway_sel$tag,
+    de_sel = de_sel,
     cmp = cmp
   )
   

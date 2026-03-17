@@ -17,15 +17,15 @@
 #' @importFrom enrichplot heatplot treeplot upsetplot pairwise_termsim emapplot
 #' @importFrom grid grid.newpage grid.text
 #' @export
-mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, de_sel = NULL, cmp = NULL) {
+mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, tag_rv = NULL, de_sel = NULL, cmp = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
     # -------- tag helper (cmp preferred, then de_sel, else "contrast")
     .get_tag <- function() {
-      if (isTRUE(input$pathway_use_custom_file) && !is.null(input$pathway_custom_file)) {
-        nm <- tools::file_path_sans_ext(input$pathway_custom_file$name)
-        if (!is.null(nm) && nzchar(nm)) return(nm)
+      if (!is.null(tag_rv) && is.function(tag_rv)) {
+        t <- tag_rv()
+        if (!is.null(t) && nzchar(t)) return(t)
       }
       
       if (!is.null(cmp) && is.function(cmp$tag)) {

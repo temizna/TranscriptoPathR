@@ -276,7 +276,10 @@ mod_pathway_server <- function(
         pathway_result_rv(pathway_result)
         incProgress(1)
       })
-    })
+      return(list(
+        tag = shiny::reactive(.get_tag())
+      ))
+        })
     
     # ---- Plots & Downloads ---------------------------------------------------
     output$dotPlot <- shiny::renderPlot({
