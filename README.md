@@ -61,7 +61,7 @@ VignetteBuilder: knitr
 ## ✨ Features
 
 - **Data Input**  
-  - Upload RNA-Seq raw count matrix and design metadata file (CSV or XLSX)  
+  - Load RNA-Seq raw count matrix and design metadata file (CSV or XLSX)  
 
 - **Sample Selection**  
   - Interactive filtering of samples for downstream analysis

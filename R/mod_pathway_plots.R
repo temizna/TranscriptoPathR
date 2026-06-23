@@ -40,7 +40,36 @@ mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, tag_rv 
       df <- as.data.frame(pr)
       max(1L, min(as.integer(default), nrow(df)))
     }
-    
+    .safe_treeplot <- function(pr) {
+      df <- as.data.frame(pr)
+      if (is.null(df) || nrow(df) < 2) return(NULL)
+      
+      if (is.null(pr@termsim) || all(is.na(pr@termsim)) || all(pr@termsim == 0)) {
+        pr_try <- try(enrichplot::pairwise_termsim(pr), silent = TRUE)
+        if (inherits(pr_try, "try-error")) return(NULL)
+        pr <- pr_try
+      }
+      
+      show_cat <- min(30L, nrow(as.data.frame(pr)))
+      if (show_cat < 2L) return(NULL)
+      
+      p <- try(
+        suppressWarnings(
+          enrichplot::treeplot(
+            pr,
+            showCategory = show_cat,
+            cluster.params = list(
+              n = min(4L, max(1L, ceiling(show_cat / 10))),
+              label_words_n = 4L
+            )
+          )
+        ),
+        silent = TRUE
+      )
+      
+      if (inherits(p, "try-error")) return(NULL)
+      p
+    }
     # -------- Heatmap
     output$pathheatmapPlot <- shiny::renderPlot({
       shiny::req(pathway_result_rv(), geneList_rv())
@@ -59,42 +88,21 @@ mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, tag_rv 
       shiny::req(pathway_result_rv())
       pr <- pathway_result_rv()
       df <- as.data.frame(pr)
+      
       if (is.null(df) || nrow(df) < 2) {
         shiny::showNotification("No enrichment terms available for treeplot.", type = "warning")
         return(NULL)
       }
       
-      # ensure term similarity
-      if (is.null(pr@termsim) || all(is.na(pr@termsim)) || all(pr@termsim == 0)) {
-        pr_try <- try(enrichplot::pairwise_termsim(pr), silent = TRUE)
-        if (inherits(pr_try, "try-error")) {
-          shiny::showNotification("No valid term similarity for treeplot.", type = "warning")
-          return(NULL)
-        } else {
-          pr <- pr_try
-        }
+      p <- .safe_treeplot(pr)
+      
+      if (is.null(p)) {
+        shiny::showNotification("treeplot failed; showing emapplot instead.", type = "message")
+        pr2 <- try(enrichplot::pairwise_termsim(pr), silent = TRUE)
+        if (!inherits(pr2, "try-error")) pr <- pr2
+        p <- enrichplot::emapplot(pr, showCategory = min(20L, nrow(as.data.frame(pr))))
       }
       
-      # safe parameters
-      n_terms  <- nrow(df)
-      show_cat <- min(30, max(5, n_terms))
-      nCluster <- min(4, max(1, ceiling(show_cat / 10)))
-      nWords   <- 4
-      
-      p <- try(
-        enrichplot::treeplot(
-          pr,
-          showCategory = show_cat,
-          nCluster     = nCluster,
-          nWords       = nWords
-        ),
-        silent = TRUE
-      )
-      
-      if (inherits(p, "try-error")) {
-        shiny::showNotification("treeplot failed; showing emapplot as fallback.", type = "message")
-        p <- enrichplot::emapplot(pr, showCategory = min(20, n_terms))
-      }
       print(p)
     })
     
@@ -130,35 +138,28 @@ mod_pathway_plots_server <- function(id, pathway_result_rv, geneList_rv, tag_rv 
         df <- as.data.frame(pr)
         
         grDevices::pdf(file, width = 8.5, height = 11)
+        on.exit(grDevices::dev.off(), add = TRUE)
         
         if (is.null(df) || nrow(df) < 2) {
-          grid::grid.newpage(); grid::grid.text("No enrichment terms for treeplot."); grDevices::dev.off(); return()
-        }
-        
-        # ensure term similarity for PDF, same as screen
-        if (is.null(pr@termsim) || all(is.na(pr@termsim)) || all(pr@termsim == 0)) {
-          pr_try <- try(enrichplot::pairwise_termsim(pr), silent = TRUE)
-          if (!inherits(pr_try, "try-error")) pr <- pr_try else {
-            grid::grid.newpage(); grid::grid.text("No valid term similarity for treeplot."); grDevices::dev.off(); return()
-          }
-        }
-        
-        n_terms  <- nrow(df)
-        show_cat <- min(30, max(5, n_terms))
-        nCluster <- min(4, max(1, ceiling(show_cat / 10)))
-        nWords   <- 4
-        
-        p <- try(
-          enrichplot::treeplot(pr, showCategory = show_cat, nCluster = nCluster, nWords = nWords),
-          silent = TRUE
-        )
-        if (inherits(p, "try-error")) {
           grid::grid.newpage()
-          grid::grid.text("treeplot failed; try emapplot in the app.")
+          grid::grid.text("No enrichment terms for treeplot.")
+          return()
+        }
+        
+        p <- .safe_treeplot(pr)
+        
+        if (is.null(p)) {
+          pr2 <- try(enrichplot::pairwise_termsim(pr), silent = TRUE)
+          if (!inherits(pr2, "try-error")) pr <- pr2
+          p <- try(enrichplot::emapplot(pr, showCategory = min(20L, nrow(as.data.frame(pr)))), silent = TRUE)
+        }
+        
+        if (inherits(p, "try-error") || is.null(p)) {
+          grid::grid.newpage()
+          grid::grid.text("treeplot could not be rendered.")
         } else {
           print(p)
         }
-        grDevices::dev.off()
       }
     )
     
