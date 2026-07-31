@@ -1,4 +1,4 @@
-# === Module: mod_de_server (comparison-safe, with extra annotations) ===
+# === Module: mod_de_server ===
 #' Differential Expression Server Module (DESeq2)
 #'
 #' If a comparison builder `cmp` is supplied and has a valid selection,
@@ -373,53 +373,47 @@ mod_de_server <- function(id, filtered_data_rv, filtered_dds_rv, res_reactive, c
       } else {
         ids <- cmp$included_samples()
         cf  <- cmp$cmp_factor()
+        
         if (length(ids) != length(cf)) {
-          shiny::showNotification("Comparison invalid: sample IDs and roles mismatch.", type = "error"); return()
+          shiny::showNotification(
+            "Comparison invalid: sample IDs and roles mismatch.",
+            type = "error"
+          )
+          return()
         }
+        
+        cf <- factor(
+          as.character(cf),
+          levels = c("Reference", "Test")
+        )
+        
+        if (anyNA(cf) || !all(c("Reference", "Test") %in% cf)) {
+          shiny::showNotification(
+            "Comparison must contain valid Reference and Test samples.",
+            type = "error"
+          )
+          return()
+        }
+        
         counts_sub  <- filtered_data_rv$counts[, ids, drop = FALSE]
         coldata_sub <- filtered_data_rv$samples[ids, , drop = FALSE]
-        role_vec <- as.character(cf)
-        names(role_vec) <- ids  # just in case not already named
-        coldata_sub$cmp_group <- droplevels(
-          factor(role_vec[rownames(coldata_sub)], levels = c("Reference", "Test"))
-        ) 
-        message("=== DEBUG: cmp_group column ===")
-        print(table(coldata_sub$cmp_group))
-        print(head(coldata_sub[, c("cmp_group")], 10))
-        message("=== DEBUG: cmp_factor() ===")
-        print(head(cmp$cmp_factor()))
-        print(table(cmp$cmp_factor()))
-        ids <- cmp$included_samples()
-        cf <- cmp$cmp_factor()
-        stopifnot(all(ids %in% colnames(filtered_data_rv$counts)))  # critical
-        stopifnot(length(ids) == length(cf))  # required
-        
-        # Check matching
-        true_group <- NULL
-        if (!is.null(input$metadata_column) &&
-            input$metadata_column %in% colnames(filtered_data_rv$samples)) {
-          true_group <- as.character(filtered_data_rv$samples[ids, input$metadata_column, drop = TRUE])
-        }
-        
-        role_df <- data.frame(
-          sample = ids,
-          role = as.character(cf),
-          true_group = true_group,
-          stringsAsFactors = FALSE
-        )
-        print(head(role_df))
-        
+        coldata_sub$cmp_group <- cf
         
         dds <- DESeq2::DESeqDataSetFromMatrix(
           countData = counts_sub,
-          colData   = coldata_sub,
-          design    = ~ cmp_group
+          colData = coldata_sub,
+          design = ~ cmp_group
         )
-        dds$cmp_group <- stats::relevel(dds$cmp_group, ref = "Reference")
+        
         dds <- suppressMessages(DESeq2::DESeq(dds))
-        res <- suppressMessages(DESeq2::results(dds, contrast = c("cmp_group", "Test", "Reference")))
+        
+        res <- suppressMessages(
+          DESeq2::results(
+            dds,
+            contrast = c("cmp_group", "Test", "Reference")
+          )
+        )
       }
-      
       # tidy results + SYMBOL column
       rn <- rownames(res)
       res$symbol <- rn
