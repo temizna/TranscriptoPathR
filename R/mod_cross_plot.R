@@ -78,52 +78,108 @@ mod_cross_server <- function(id, filtered_data_rv, filtered_dds_rv) {
     # Safe dotplot for compareCluster (no crash if p.adjust missing)
     safe_comparecluster_dotplot <- function(cc, showCategory = 10, x = "Cluster") {
       if (is.null(cc)) return(NULL)
+      
       df <- as.data.frame(cc)
       if (!nrow(df)) return(NULL)
       
-      # Ensure columns needed for plotting exist
       if (!"p.adjust" %in% names(df)) {
-        if ("pvalue" %in% names(df)) df$p.adjust <- df$pvalue else df$p.adjust <- NA_real_
+        df$p.adjust <- if ("pvalue" %in% names(df)) df$pvalue else NA_real_
       }
-      # Count & GeneRatio
+      
       if (!"Count" %in% names(df) && "core_enrichment" %in% names(df)) {
-        df$Count <- vapply(strsplit(df$core_enrichment, "/"), length, integer(1))
+        df$Count <- lengths(strsplit(as.character(df$core_enrichment), "/"))
       }
-      if (!"GeneRatio" %in% names(df) || all(is.na(df$GeneRatio))) {
-        if ("setSize" %in% names(df) && "Count" %in% names(df)) {
-          df$GeneRatio <- paste0(df$Count, "/", df$setSize)
-        } else {
-          df$GeneRatio <- NA_character_
-        }
-      }
-      df$GeneRatioNum <- parse_gene_ratio(df$GeneRatio)
       
-      # Order by significance within each cluster
-      if ("Cluster" %in% names(df)) {
-        df <- df[order(df$Cluster, df$p.adjust, df$pvalue %||% Inf), ]
-        # keep up to showCategory per cluster
-        df <- do.call(rbind, lapply(split(df, df$Cluster), function(s) head(s, showCategory)))
+      if (!"Count" %in% names(df)) {
+        df$Count <- 1
+      }
+      
+      # Force plotting columns to ordinary atomic vectors
+      df$Description <- as.character(unlist(df$Description, use.names = FALSE))
+      df$p.adjust <- as.numeric(unlist(df$p.adjust, use.names = FALSE))
+      df$Count <- as.numeric(unlist(df$Count, use.names = FALSE))
+      
+      if (x %in% names(df)) {
+        df[[x]] <- as.character(unlist(df[[x]], use.names = FALSE))
       } else {
-        df <- head(df[order(df$p.adjust, df$pvalue %||% Inf), ], showCategory)
+        return(NULL)
       }
       
-      # Manual ggplot (avoids enrichplot aesthetics issues)
-      color_var <- if (all(is.na(df$p.adjust))) NULL else "p.adjust"
-      p <- ggplot2::ggplot(
-        df,
-        ggplot2::aes(
-          x = .data[[x]],
-          y = reorder(.data$Description, .data$p.adjust, function(v) -rank(v, na.last = "keep")),
-          size = .data$Count
-        )
-      ) +
-        ggplot2::geom_point(ggplot2::aes(color = !!(if (!is.null(color_var)) rlang::sym(color_var) else rlang::sym("Count")))) +
-        ggplot2::labs(x = x, y = NULL, size = "Gene Count", color = if (is.null(color_var)) "Count" else "Adj. P") +
-        ggplot2::theme_minimal(base_size = 11)
-      if (!is.null(color_var)) {
-        p <- p + ggplot2::scale_color_continuous(low = "#276EF1", high = "#F04438", trans = "reverse")
+      pvalue_order <- if ("pvalue" %in% names(df)) {
+        as.numeric(unlist(df$pvalue, use.names = FALSE))
+      } else {
+        rep(Inf, nrow(df))
       }
-      p
+      
+      if ("Cluster" %in% names(df)) {
+        df <- df[order(df$Cluster, df$p.adjust, pvalue_order, na.last = TRUE), , drop = FALSE]
+        df <- do.call(
+          rbind,
+          lapply(split(df, df$Cluster), function(z) head(z, showCategory))
+        )
+      } else {
+        df <- head(
+          df[order(df$p.adjust, pvalue_order, na.last = TRUE), , drop = FALSE],
+          showCategory
+        )
+      }
+      
+      if (!nrow(df)) return(NULL)
+      
+      # Precompute ordering instead of calling reorder() inside aes()
+      description_levels <- unique(
+        df$Description[order(df$p.adjust, na.last = TRUE)]
+      )
+      
+      df$Description_plot <- factor(
+        df$Description,
+        levels = rev(description_levels)
+      )
+      
+      use_padj <- !all(is.na(df$p.adjust))
+      
+      if (use_padj) {
+        p <- ggplot2::ggplot(
+          df,
+          ggplot2::aes(
+            x = .data[[x]],
+            y = .data$Description_plot,
+            size = .data$Count,
+            color = .data$p.adjust
+          )
+        ) +
+          ggplot2::scale_color_continuous(
+            low = "#276EF1",
+            high = "#F04438",
+            trans = "reverse"
+          ) +
+          ggplot2::labs(
+            x = x,
+            y = NULL,
+            size = "Gene Count",
+            color = "Adj. P"
+          )
+      } else {
+        p <- ggplot2::ggplot(
+          df,
+          ggplot2::aes(
+            x = .data[[x]],
+            y = .data$Description_plot,
+            size = .data$Count,
+            color = .data$Count
+          )
+        ) +
+          ggplot2::labs(
+            x = x,
+            y = NULL,
+            size = "Gene Count",
+            color = "Count"
+          )
+      }
+      
+      p +
+        ggplot2::geom_point() +
+        ggplot2::theme_minimal(base_size = 11)
     }
     
     crossplot_data <- shiny::reactiveVal(NULL)
